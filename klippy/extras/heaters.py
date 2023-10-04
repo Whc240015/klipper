@@ -344,6 +344,13 @@ class PrinterHeaters:
         heater.set_temp(temp)
         if wait and temp:
             self._wait_for_temperature(heater)
+        if heater.name=='extruder':
+            the_dual_carriage = self.printer.lookup_object('dual_carriage', None)
+            if the_dual_carriage is not None:
+                if the_dual_carriage.need_dual_heat():
+                    e1 = self.printer.lookup_object('extruder1', None)
+                    if e1 is not None:
+                        e1.get_heater().set_temp(temp)
     cmd_TEMPERATURE_WAIT_help = "Wait for a temperature on a sensor"
     def cmd_TEMPERATURE_WAIT(self, gcmd):
         sensor_name = gcmd.get('SENSOR')

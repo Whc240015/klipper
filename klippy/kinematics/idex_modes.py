@@ -79,6 +79,10 @@ class DualCarriages:
     def get_status(self, eventtime=None):
         return {('carriage_%d' % (i,)) : dc.mode
                 for (i, dc) in enumerate(self.dc)}
+    def need_dual_heat(self):
+        if self.get_status()['carriage_1'] in [COPY, MIRROR]:
+            return True
+        return False
     def get_kin_range(self, toolhead, mode):
         pos = toolhead.get_position()
         axes_pos = [dc.get_axis_position(pos) for dc in self.dc]
