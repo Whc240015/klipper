@@ -6,7 +6,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import sys, os, gc, optparse, logging, time, collections, importlib
 import util, reactor, queuelogger, msgproto
-import gcode, configfile, pins, mcu, toolhead, webhooks
+import gcode, configfile, pins, mcu, toolhead, webhooks, extras.fan
 
 message_ready = "Printer is ready"
 
@@ -139,7 +139,7 @@ class Printer:
             m.add_printer_objects(config)
         for section_config in config.get_prefix_sections(''):
             self.load_object(config, section_config.get_name(), None)
-        for m in [toolhead]:
+        for m in [toolhead, extras.fan]:
             m.add_printer_objects(config)
         # Validate that there are no undefined parameters in the config file
         pconfig.check_unused_options(config)

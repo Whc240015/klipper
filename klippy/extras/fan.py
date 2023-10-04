@@ -101,21 +101,52 @@ class FanTachometer:
         return {'rpm': rpm}
 
 class PrinterFan:
-    def __init__(self, config):
+    def __init__(self, config, fan_num):
         self.fan = Fan(config)
+        self.name = config.get_name()
+        self.printer = config.get_printer()
         # Register commands
-        gcode = config.get_printer().lookup_object('gcode')
-        gcode.register_command("M106", self.cmd_M106)
-        gcode.register_command("M107", self.cmd_M107)
+        gcode = self.printer.lookup_object('gcode')
+        if self.name == 'fan':
+            gcode.register_command("M106", self.cmd_M106)
+            gcode.register_command("M107", self.cmd_M107)
     def get_status(self, eventtime):
         return self.fan.get_status(eventtime)
     def cmd_M106(self, gcmd):
         # Set fan speed
         value = gcmd.get_float('S', 255., minval=0.) / 255.
-        self.fan.set_speed_from_command(value)
+        index = gcmd.get_int('P', 0, minval=0)
+        
+        the_dual_carriage = self.printer.lookup_object('dual_carriage', None)
+        if index > 0 or the_dual_carriage is not None:
+            section = 'fan'
+            if index:
+                section = 'fan%d' % (index,)
+            elif the_dual_carriage.need_dual_heat():
+                dual_fan = self.printer.lookup_object('fan1', None)
+                if dual_fan is None:
+                    gcmd.error("%s not configured", ('fan1',))
+                dual_fan.fan.set_speed_from_command(value)
+            
+            the_fan = self.printer.lookup_object(section, None)
+            if the_fan is None:
+                gcmd.error("%s not configured", (section,))
+            the_fan.fan.set_speed_from_command(value)
+        else:
+            self.fan.set_speed_from_command(value)
     def cmd_M107(self, gcmd):
         # Turn fan off
         self.fan.set_speed_from_command(0.)
 
-def load_config(config):
-    return PrinterFan(config)
+# def load_config(config):
+#     return PrinterFan(config)
+def add_printer_objects(config):
+    printer = config.get_printer()
+    for i in range(99):
+        section = 'fan'
+        if i:
+            section = 'fan%d' % (i,)
+        if not config.has_section(section):
+            break
+        pe = PrinterFan(config.getsection(section), i)
+        printer.add_object(section, pe)
