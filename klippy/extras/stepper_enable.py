@@ -72,6 +72,7 @@ class EnableTracking:
 
 # Global stepper enable line tracking
 class PrinterStepperEnable:
+    the_axes={'X':0, 'Y':1, 'Z':2}
     def __init__(self, config):
         self.printer = config.get_printer()
         self.enable_lines = {}
@@ -88,13 +89,37 @@ class PrinterStepperEnable:
         name = mcu_stepper.get_name()
         enable = setup_enable_pin(self.printer, config.get('enable_pin', None))
         self.enable_lines[name] = EnableTracking(mcu_stepper, enable)
-    def motor_off(self):
+    def motor_off(self,gcmd=None):
         toolhead = self.printer.lookup_object('toolhead')
         toolhead.dwell(DISABLE_STALL_TIME)
         print_time = toolhead.get_last_move_time()
-        for el in self.enable_lines.values():
-            el.motor_disable(print_time)
-        self.printer.send_event("stepper_enable:motor_off", print_time)
+        # for el in self.enable_lines.values():
+        #     el.motor_disable(print_time)
+        # self.printer.send_event("stepper_enable:motor_off", print_time)
+        if gcmd is not None:
+            homing_axes_str = []
+            params = gcmd.get_command_parameters()
+            if 'X' in params or 'Y' in params or 'Z' in params:
+                for e_name in self.enable_lines.keys():
+                    if e_name[0]=='s':
+                        axis = e_name[8].upper()
+                        if axis in params:
+                            self.enable_lines[e_name].motor_disable(print_time)
+                            try:
+                                homing_axes_str.append(self.the_axes[axis])
+                            except KeyError:
+                                pass
+                homing_axes = tuple(list(set(homing_axes_str)))
+            else:
+                homing_axes = (0,1,2)
+                for el in self.enable_lines.values():
+                    el.motor_disable(print_time)
+        else:
+            homing_axes = (0,1,2)
+            for el in self.enable_lines.values():
+                el.motor_disable(print_time)
+
+        self.printer.send_event("stepper_enable:motor_off", print_time, homing_axes)
         toolhead.dwell(DISABLE_STALL_TIME)
     def motor_debug_enable(self, stepper, enable):
         toolhead = self.printer.lookup_object('toolhead')
@@ -116,7 +141,7 @@ class PrinterStepperEnable:
         self.motor_off()
     def cmd_M18(self, gcmd):
         # Turn off motors
-        self.motor_off()
+        self.motor_off(gcmd)
     cmd_SET_STEPPER_ENABLE_help = "Enable/disable individual stepper by name"
     def cmd_SET_STEPPER_ENABLE(self, gcmd):
         stepper_name = gcmd.get('STEPPER', None)
