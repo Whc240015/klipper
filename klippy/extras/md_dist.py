@@ -29,26 +29,57 @@ class MD_Dist_Probe:
         self.reactor = self.printer.get_reactor()
         self.name = config.get_name()
 
-        self.speed = config.getfloat('speed', 5.0, above=0.)
-        self.lift_speed = config.getfloat('lift_speed', self.speed, above=0.)
-        self.backlash_comp = config.getfloat('backlash_comp', 0.5)
-
-        self.x_offset = config.getfloat('x_offset', 0.)
-        self.y_offset = config.getfloat('y_offset', 0.)
-
-        self.trigger_distance = config.getfloat('trigger_distance', 2.)
-        self.trigger_dive_threshold = config.getfloat('trigger_dive_threshold', 1.)
-        self.trigger_hysteresis = config.getfloat('trigger_hysteresis', 0.006)
-        self.z_settling_time = config.getint("z_settling_time", 5, minval=0)
+        self.speed = config.getfloat(
+            "speed", 5.0, above=0.0
+        )
+        self.lift_speed = config.getfloat(
+            "lift_speed", self.speed, above=0.0
+        )
+        self.backlash_comp = config.getfloat(
+            "backlash_comp", 0.5
+        )
+        self.x_offset = config.getfloat(
+            "x_offset", 0.0
+        )
+        self.y_offset = config.getfloat(
+            "y_offset", 0.0
+        )
+        self.trigger_distance = config.getfloat(
+            "trigger_distance", 2.0
+        )
+        self.trigger_dive_threshold = config.getfloat(
+            "trigger_dive_threshold", 1.0
+        )
+        self.trigger_hysteresis = config.getfloat(
+            "trigger_hysteresis", 0.006
+        )
+        self.z_settling_time = config.getint(
+            "z_settling_time", 5, minval=0
+        )
 
         # If using paper for calibration, this would be .1mm
-        self.cal_nozzle_z = config.getfloat('cal_nozzle_z', 0.1)
-        self.cal_floor = config.getfloat('cal_floor', 0.2)
-        self.cal_ceil = config.getfloat('cal_ceil', 5.)
-        self.cal_speed = config.getfloat('cal_speed', 1.)
-        self.cal_move_speed = config.getfloat('cal_move_speed', 10.)
-        self.end_park_x, self.end_park_y = config.getfloatlist('end_park_pos', count=2)
-        self.first_move_axis = config.getchoice('first_move_axis', {'x': 'x', 'X': 'x', 'y': 'y', 'Y': 'y'}, 'y')
+        self.cal_nozzle_z = config.getfloat(
+            "cal_nozzle_z", 0.1
+        )
+        self.cal_floor = config.getfloat(
+            "cal_floor", 0.2
+        )
+        self.cal_ceil = config.getfloat(
+            "cal_ceil", 5.0
+        )
+        self.cal_speed = config.getfloat(
+            "cal_speed", 1.0
+        )
+        self.cal_move_speed = config.getfloat(
+            "cal_move_speed", 10.0
+        )
+
+        self.end_park_x, self.end_park_y = config.getfloatlist(
+            "end_park_pos", count=2
+        )
+        self.first_move_axis = config.getchoice(
+            "first_move_axis", {'x':'x', 'X':'x', 'y':'y', 'Y':'y'}, 'y'
+        )
 
         # Load models
         self.model = None
@@ -56,13 +87,16 @@ class MD_Dist_Probe:
         self.model_temp_builder = MD_Dist_Temp_Model_Builder.load(config)
         self.model_temp = None
         self.fmin = None
-        self.default_model_name = config.get('default_model_name', 'default')
+        self.default_model_name = config.get(
+            "default_model_name",
+            "default"
+        )
         self.model_manager = Model_Manager(self)
 
         # Temperature sensor integration
         self.last_temp = 0
-        self.measured_min = 99999999.
-        self.measured_max = 0.
+        self.measured_min = 99999999.0
+        self.measured_max = 0.0
 
         self.last_sample = None
         self.hardware_failure = None
@@ -70,7 +104,9 @@ class MD_Dist_Probe:
         self.mesh_helper = MD_Dist_Mesh_Helper.create(self, config)
 
         self._stream_en = 0
-        self._stream_timeout_timer = self.reactor.register_timer(self._stream_timeout)
+        self._stream_timeout_timer = self.reactor.register_timer(
+            self._stream_timeout
+        )
         self._stream_callbacks = {}
         self._stream_latency_requests = {}
         self._stream_buffer = []
@@ -80,57 +116,79 @@ class MD_Dist_Probe:
         self._stream_flush_event = threading.Event()
         self._log_stream = None
         self._data_filter = Alpha_Beta_Filter(
-            config.getfloat('filter_alpha', 0.5),
-            config.getfloat('filter_beta', 0.000001),
+            config.getfloat("filter_alpha", 0.5),
+            config.getfloat("filter_beta", 0.000001),
         )
         self.trapq = None
 
-        mainsync = self.printer.lookup_object('mcu')._clocksync
+        mainsync = self.printer.lookup_object("mcu")._clocksync
         self._mcu = MCU(config, SecondarySync(self.reactor, mainsync))
-        self.printer.add_object('mcu ' + self.name, self._mcu)
+        self.printer.add_object("mcu " + self.name, self._mcu)
         self.cmd_queue = self._mcu.alloc_command_queue()
         self.mcu_probe = MD_Dist_Endstop_Wrapper(self)
 
         # Register z_virtual_endstop
-        self.printer.lookup_object('pins').register_chip('probe', self)
+        self.printer.lookup_object("pins").register_chip("probe", self)
         # Register event handlers
-        self.printer.register_event_handler('klippy:connect', self._handle_connect)
-        self.printer.register_event_handler('klippy:mcu_identify', self._handle_mcu_identify)
+        self.printer.register_event_handler(
+            "klippy:connect",
+            self._handle_connect
+        )
+        self.printer.register_event_handler(
+            "klippy:mcu_identify",
+            self._handle_mcu_identify
+        )
         self._mcu.register_config_callback(self._build_config)
-        self._mcu.register_response(self._handle_md_dist_data, "md_dist_data")
+        self._mcu.register_response(
+            self._handle_md_dist_data,
+            "md_dist_data"
+        )
         # Register webhooks
-        webhooks = self.printer.lookup_object('webhooks')
+        webhooks = self.printer.lookup_object("webhooks")
         self._api_dump_helper = API_Dump_Helper(self)
-        webhooks.register_endpoint('md_dist/status', self._handle_req_status)
-        webhooks.register_endpoint('md_dist/dump', self._handle_req_dump)
+        webhooks.register_endpoint("md_dist/status", self._handle_req_status)
+        webhooks.register_endpoint("md_dist/dump", self._handle_req_dump)
         # Register gcode commands
-        self.gcode = self.printer.lookup_object('gcode')
-        self.gcode.register_command('MD_DIST_STREAM',
-                                    self.cmd_MD_DIST_STREAM,
-                                    desc=self.cmd_MD_DIST_STREAM_help)
-        self.gcode.register_command('MD_DIST_QUERY',
-                                    self.cmd_MD_DIST_QUERY,
-                                    desc=self.cmd_MD_DIST_QUERY_help)
-        self.gcode.register_command('MD_DIST_CALIBRATE',
-                                    self.cmd_MD_DIST_CALIBRATE,
-                                    desc=self.cmd_MD_DIST_CALIBRATE_help)
-        self.gcode.register_command('MD_DIST_ESTIMATE_BACKLASH',
-                                    self.cmd_MD_DIST_ESTIMATE_BACKLASH,
-                                    desc=self.cmd_MD_DIST_ESTIMATE_BACKLASH_help)
-        self.gcode.register_command('PROBE',
-                                    self.cmd_PROBE,
-                                    desc=self.cmd_PROBE_help)
-        self.gcode.register_command('PROBE_ACCURACY',
-                                    self.cmd_PROBE_ACCURACY,
-                                    desc=self.cmd_PROBE_ACCURACY_help)
-        self.gcode.register_command('Z_OFFSET_APPLY_PROBE',
-                                    self.cmd_Z_OFFSET_APPLY_PROBE,
-                                    desc=self.cmd_Z_OFFSET_APPLY_PROBE_help)
+        self.gcode = self.printer.lookup_object("gcode")
+        self.gcode.register_command(
+            "MD_DIST_STREAM",
+            self.cmd_MD_DIST_STREAM,
+            desc=self.cmd_MD_DIST_STREAM_help
+        )
+        self.gcode.register_command(
+            "MD_DIST_QUERY",
+            self.cmd_MD_DIST_QUERY,
+            desc=self.cmd_MD_DIST_QUERY_help
+        )
+        self.gcode.register_command(
+            "MD_DIST_CALIBRATE",
+            self.cmd_MD_DIST_CALIBRATE,
+            desc=self.cmd_MD_DIST_CALIBRATE_help
+        )
+        self.gcode.register_command(
+            "MD_DIST_ESTIMATE_BACKLASH",
+            self.cmd_MD_DIST_ESTIMATE_BACKLASH,
+            desc=self.cmd_MD_DIST_ESTIMATE_BACKLASH_help
+        )
+        self.gcode.register_command(
+            "PROBE",
+            self.cmd_PROBE,
+            desc=self.cmd_PROBE_help
+        )
+        self.gcode.register_command(
+            "PROBE_ACCURACY",
+            self.cmd_PROBE_ACCURACY,
+            desc=self.cmd_PROBE_ACCURACY_help
+        )
+        self.gcode.register_command(
+            "Z_OFFSET_APPLY_PROBE",
+            self.cmd_Z_OFFSET_APPLY_PROBE,
+            desc=self.cmd_Z_OFFSET_APPLY_PROBE_help
+        )
 
     # Event handlers
-
     def _handle_connect(self):
-        self.phoming = self.printer.lookup_object('homing')
+        self.phoming = self.printer.lookup_object("homing")
 
         # Ensure streaming mode is stopped
         self.md_dist_stream_cmd.send([0])
@@ -145,41 +203,57 @@ class MD_Dist_Probe:
     def _handle_mcu_identify(self):
         constants = self._mcu.get_constants()
 
-        self.sensor_freq = self._mcu._mcu_freq if self._mcu._mcu_freq < 20000000 else self._mcu._mcu_freq/2
+        if self._mcu._mcu_freq < 20000000:
+            self.sensor_freq =  self._mcu._mcu_freq
+        elif self._mcu._mcu_freq < 100000000:
+            self.sensor_freq = self._mcu._mcu_freq/2
+        else:
+            self.sensor_freq = self._mcu._mcu_freq/6
 
         self.inv_adc_max = 1.0 / constants.get("ADC_MAX")
-        self.temp_smooth_count = constants.get('MD_DIST_ADC_SMOOTH_COUNT')
-        self.thermistor = thermistor.Thermistor(10000., 0.)
-        self.thermistor.setup_coefficients_beta(25., 47000., 4041.)
+        self.temp_smooth_count = constants.get("MD_DIST_ADC_SMOOTH_COUNT")
+        self.thermistor = thermistor.Thermistor(10000.0, 0.0)
+        self.thermistor.setup_coefficients_beta(25.0, 47000.0, 4041.0)
 
         self.toolhead = self.printer.lookup_object("toolhead")
         self.trapq = self.toolhead.get_trapq()
 
     def _build_config(self):
         self.md_dist_stream_cmd = self._mcu.lookup_command(
-            "md_dist_stream en=%u", cq=self.cmd_queue)
+            "md_dist_stream en=%u",
+            cq=self.cmd_queue
+        )
         self.md_dist_set_threshold_cmd = self._mcu.lookup_command(
-            "md_dist_set_threshold trigger=%u untrigger=%u", cq=self.cmd_queue)
+            "md_dist_set_threshold trigger=%u untrigger=%u",
+            cq=self.cmd_queue
+        )
         self.md_dist_home_cmd = self._mcu.lookup_command(
             "md_dist_home trsync_oid=%c trigger_reason=%c trigger_invert=%c",
-            cq=self.cmd_queue)
+            cq=self.cmd_queue
+        )
         self.md_dist_stop_home_cmd = self._mcu.lookup_command(
-            "md_dist_stop_home", cq=self.cmd_queue)
+            "md_dist_stop_home",
+            cq=self.cmd_queue
+        )
         self.md_dist_base_read_cmd = self._mcu.lookup_query_command(
             "md_dist_base_read len=%c offset=%hu",
             "md_dist_base_data bytes=%*s offset=%hu",
-            cq=self.cmd_queue)
+            cq=self.cmd_queue
+        )
 
     def stats(self, eventtime):
-        return False, '%s: coil_temp=%.1f' % (self.name, self.last_temp)
+        return False, "%s: coil_temp=%.1f" % (self.name, self.last_temp)
 
     # Virtual endstop
-
     def setup_pin(self, pin_type, pin_params):
-        if pin_type != 'endstop' or pin_params['pin'] != 'z_virtual_endstop':
-            raise pins.error("Probe virtual endstop only useful as endstop pin")
-        if pin_params['invert'] or pin_params['pullup']:
-            raise pins.error("Can not pullup/invert probe virtual endstop")
+        if pin_type != "endstop" or pin_params["pin"] != "z_virtual_endstop":
+            raise pins.error(
+                "Probe virtual endstop only useful as endstop pin"
+            )
+        if pin_params["invert"] or pin_params["pullup"]:
+            raise pins.error(
+                "Can not pullup/invert probe virtual endstop"
+            )
         return self.mcu_probe
 
     # Probe interface
@@ -201,12 +275,12 @@ class MD_Dist_Probe:
         if self.model is None:
             raise self.printer.command_error("No md_dist model loaded")
 
-        speed = gcmd.get_float("PROBE_SPEED", self.speed, above=0.)
-        allow_faulty = gcmd.get_int('ALLOW_FAULTY_COORDINATE', 0) != 0
+        speed = gcmd.get_float("PROBE_SPEED", self.speed, above=0.0)
+        allow_faulty = gcmd.get_int("ALLOW_FAULTY_COORDINATE", 0) != 0
         lift_speed = self.get_lift_speed(gcmd)
-        toolhead = self.printer.lookup_object('toolhead')
+        toolhead = self.printer.lookup_object("toolhead")
         curtime = self.reactor.monotonic()
-        if 'z' not in toolhead.get_status(curtime)['homed_axes']:
+        if 'z' not in toolhead.get_status(curtime)["homed_axes"]:
             raise self.printer.command_error("Must home before probe")
 
         self._start_streaming()
@@ -228,7 +302,7 @@ class MD_Dist_Probe:
         curtime = self.reactor.monotonic()
         status = self.toolhead.get_kinematics().get_status(curtime)
         pos = self.toolhead.get_position()
-        pos[2] = status['axis_minimum'][2]
+        pos[2] = status["axis_minimum"][2]
         try:
             self.phoming.probing_move(self.mcu_probe, pos, speed)
             self._sample_printtime_sync(self.z_settling_time)
@@ -243,7 +317,7 @@ class MD_Dist_Probe:
         tdt = self.trigger_dive_threshold
         (dist, samples) = self._sample(5, num_samples)
 
-        x, y = samples[0]['pos'][0:2]
+        x, y = samples[0]["pos"][0:2]
         if self._is_faulty_coordinate(x, y, True):
             msg = "Probing within a faulty area"
             if not allow_faulty:
@@ -258,7 +332,8 @@ class MD_Dist_Probe:
             (dist, samples) = self._sample(self.z_settling_time, num_samples)
         elif math.isinf(dist) and dist < 0:
             # We were below the valid range of the model
-            msg = "Attempted to probe with MD_DIST below calibrated model range"
+            msg = """Attempted to probe with
+                  MD_DIST below calibrated model range"""
             raise self.printer.command_error(msg)
         elif self.toolhead.get_position()[2] < target - tdt:
             # We are below the probing target height, we'll move to the
@@ -266,19 +341,24 @@ class MD_Dist_Probe:
             self._move_to_probing_height(speed)
             (dist, samples) = self._sample(self.z_settling_time, num_samples)
 
-        pos = samples[0]['pos']
+        pos = samples[0]["pos"]
 
-        self.gcode.respond_info("probe at %.3f,%.3f,%.3f is z=%.6f"
-                                % (pos[0], pos[1], pos[2], dist))
+        self.gcode.respond_info(
+            "probe at %.3f,%.3f,%.3f is z=%.6f"
+            % (pos[0], pos[1], pos[2], dist)
+        )
 
         return [pos[0], pos[1], pos[2] + target - dist]
 
     # Calibration routines
     def _start_calibration(self, gcmd):
-        allow_faulty = gcmd.get_int('ALLOW_FAULTY_COORDINATE', 0) != 0
+        allow_faulty = gcmd.get_int("ALLOW_FAULTY_COORDINATE", 0) != 0
         if gcmd.get("SKIP_MANUAL_PROBE", None) is not None:
             kin = self.toolhead.get_kinematics()
-            kin_spos = {s.get_name(): s.get_commanded_position() for s in kin.get_steppers()}
+            kin_spos = {
+                s.get_name(): s.get_commanded_position() \
+                    for s in kin.get_steppers()
+            }
             kin_pos = kin.calc_position(kin_spos)
             if self._is_faulty_coordinate(kin_pos[0], kin_pos[1]):
                 msg = "Calibrating within a faulty area"
@@ -290,8 +370,10 @@ class MD_Dist_Probe:
         else:
             curtime = self.printer.get_reactor().monotonic()
             kin_status = self.toolhead.get_status(curtime)
-            if 'xy' not in kin_status['homed_axes']:
-                raise self.printer.command_error("Must home X and Y " "before calibration")
+            if "xy" not in kin_status["homed_axes"]:
+                raise self.printer.command_error(
+                    "Must home X and Y before calibration"
+                )
 
             kin_pos = self.toolhead.get_position()
             if self._is_faulty_coordinate(kin_pos[0], kin_pos[1]):
@@ -302,10 +384,10 @@ class MD_Dist_Probe:
                     gcmd.respond_raw("!! " + msg + "\n")
 
             forced_z = False
-            if 'z' not in kin_status['homed_axes']:
+            if 'z' not in kin_status["homed_axes"]:
                 self.toolhead.get_last_move_time()
                 pos = self.toolhead.get_position()
-                pos[2] = kin_status['axis_maximum'][2] - 1.0
+                pos[2] = kin_status["axis_maximum"][2] - 1.0
                 self.toolhead.set_position(pos, homing_axes=[2])
                 forced_z = True
 
@@ -316,17 +398,17 @@ class MD_Dist_Probe:
             if forced_z:
                 kin = self.toolhead.get_kinematics()
                 if hasattr(kin, "note_z_not_homed"):
-                        kin.note_z_not_homed()
+                    kin.note_z_not_homed()
             return
 
         gcmd.respond_info("MD_DIST calibration starting")
-        cal_nozzle_z = gcmd.get_float('NOZZLE_Z', self.cal_nozzle_z)
-        cal_floor = gcmd.get_float('FLOOR', self.cal_floor)
-        cal_ceil = gcmd.get_float('CEIL', self.cal_ceil)
+        cal_nozzle_z = gcmd.get_float("NOZZLE_Z", self.cal_nozzle_z)
+        cal_floor = gcmd.get_float("FLOOR", self.cal_floor)
+        cal_ceil = gcmd.get_float("CEIL", self.cal_ceil)
         cal_min_z = kin_pos[2] - cal_nozzle_z + cal_floor
         cal_max_z = kin_pos[2] - cal_nozzle_z + cal_ceil
-        cal_speed = gcmd.get_float('SPEED', self.cal_speed)
-        move_speed = gcmd.get_float('MOVE_SPEED', self.cal_move_speed)
+        cal_speed = gcmd.get_float("SPEED", self.cal_speed)
+        move_speed = gcmd.get_float("MOVE_SPEED", self.cal_move_speed)
 
         toolhead = self.toolhead
         curtime = self.reactor.monotonic()
@@ -363,16 +445,15 @@ class MD_Dist_Probe:
             self._stop_streaming()
 
         # Fit the sampled data
-        z_offset = [s['pos'][2]-cal_min_z+cal_floor
-                    for s in samples]
-        freq = [s['freq'] for s in samples]
-        temp = [s['temp'] for s in samples]
+        z_offset = [s["pos"][2]-cal_min_z+cal_floor for s in samples]
+        freq = [s["freq"] for s in samples]
+        temp = [s["temp"] for s in samples]
         inv_freq = [1/f for f in freq]
         poly = Polynomial.fit(inv_freq, z_offset, 9)
         temp_median = median(temp)
-        self.model = MD_Dist_Model("default",
-                                 self, poly, temp_median,
-                                 min(z_offset), max(z_offset))
+        self.model = MD_Dist_Model(
+            "default", self, poly, temp_median, min(z_offset), max(z_offset)
+        )
         self.models[self.model.name] = self.model
         self.model.save(self)
         self._apply_threshold()
@@ -390,15 +471,18 @@ class MD_Dist_Probe:
             f.write("%.5f,%.5f,%.3f\n" % (freq[i], z_offset[i], temp[i]))
         f.close()
 
-        gcmd.respond_info("MD_DIST calibrated at %.3f,%.3f from "
-                          "%.3f to %.3f, speed %.2f mm/s, temp %.2fC"
-                          % (pos[0], pos[1],
-                          cal_min_z, cal_max_z, cal_speed, temp_median))
+        gcmd.respond_info(
+            "MD_DIST calibrated at %.3f,%.3f from "
+            "%.3f to %.3f, speed %.2f mm/s, temp %.2fC"
+            % (pos[0], pos[1], cal_min_z, cal_max_z, cal_speed, temp_median)
+        )
 
     # Internal
-
     def _update_thresholds(self, moving_up=False):
-        self.trigger_freq = self.dist_to_freq(self.trigger_distance, self.last_temp)
+        self.trigger_freq = self.dist_to_freq(
+            self.trigger_distance,
+            self.last_temp
+        )
         self.untrigger_freq = self.trigger_freq * (1-self.trigger_hysteresis)
 
     def _apply_threshold(self, moving_up=False):
@@ -409,8 +493,9 @@ class MD_Dist_Probe:
 
     def _register_model(self, name, model):
         if name in self.models:
-            raise self.printer.config_error("Multiple md_dist models with same"
-                                            "name '%s'" % (name,))
+            raise self.printer.config_error(
+                "Multiple md_dist models with same name '%s'" % (name,)
+            )
         self.models[name] = model
 
     def _is_faulty_coordinate(self, x, y, add_offsets=False):
@@ -418,14 +503,13 @@ class MD_Dist_Probe:
             return False
         return self.mesh_helper._is_faulty_coordinate(x, y, add_offsets)
 
-        # Streaming mode
-
+    # Streaming mode
     def _check_hardware(self, sample):
         if not self.hardware_failure:
             msg = None
-            if sample['data'] == 0xFFFFFFF:
+            if sample["data"] == 0xFFFFFFF:
                 msg = "coil is shorted or not connected"
-            elif self.fmin is not None and sample['freq'] > 1.35 * self.fmin:
+            elif self.fmin is not None and sample["freq"] > 1.35*self.fmin:
                 msg = "coil expected max frequency exceeded"
             if msg:
                 msg = "MD_DIST hardware issue: " + msg
@@ -439,41 +523,47 @@ class MD_Dist_Probe:
             self.printer.invoke_shutdown(self.hardware_failure)
 
     def _enrich_sample_time(self, sample):
-        clock = sample['clock'] = self._mcu.clock32_to_clock64(sample['clock'])
-        sample['time'] = self._mcu.clock_to_print_time(clock)
+        clock = sample["clock"] = self._mcu.clock32_to_clock64(
+            sample["clock"]
+        )
+        sample["time"] = self._mcu.clock_to_print_time(clock)
 
     def _enrich_sample_temp(self, sample):
-        temp_adc = sample['temp'] / self.temp_smooth_count * self.inv_adc_max
-        sample['temp'] = self.thermistor.calc_temp(temp_adc)
+        temp_adc = sample["temp"] / self.temp_smooth_count * self.inv_adc_max
+        sample["temp"] = self.thermistor.calc_temp(temp_adc)
 
     def _enrich_sample_freq(self, sample):
-        sample['data_smooth'] = self._data_filter.value()
-        sample['freq'] = self.count_to_freq(sample['data_smooth'])
+        sample["data_smooth"] = self._data_filter.value()
+        sample["freq"] = self.count_to_freq(sample["data_smooth"])
         self._check_hardware(sample)
 
     def _enrich_sample(self, sample):
-        sample['dist'] = self.freq_to_dist(sample['freq'], sample['temp'])
-        pos, vel = self._get_trapq_position(sample['time'])
+        sample["dist"] = self.freq_to_dist(sample["freq"], sample["temp"])
+        pos, vel = self._get_trapq_position(sample["time"])
 
         if pos is None:
             return
-        sample['pos'] = pos
-        sample['vel'] = vel
+        sample["pos"] = pos
+        sample["vel"] = vel
 
     def _start_streaming(self):
         if self._stream_en == 0:
             self.md_dist_stream_cmd.send([1])
             curtime = self.reactor.monotonic()
-            self.reactor.update_timer(self._stream_timeout_timer,
-                    curtime + STREAM_TIMEOUT)
+            self.reactor.update_timer(
+                self._stream_timeout_timer,
+                curtime + STREAM_TIMEOUT
+            )
         self._stream_en += 1
         self._data_filter.reset()
         self._stream_flush()
     def _stop_streaming(self):
         self._stream_en -= 1
         if self._stream_en == 0:
-            self.reactor.update_timer(self._stream_timeout_timer,
-                    self.reactor.NEVER)
+            self.reactor.update_timer(
+                self._stream_timeout_timer,
+                self.reactor.NEVER
+            )
             self.md_dist_stream_cmd.send([0])
         self._stream_flush()
 
@@ -510,7 +600,9 @@ class MD_Dist_Probe:
             new_limit = 1
         self._stream_buffer_limit_new = new_limit
 
-    def streaming_session(self, callback, completion_callback=None, latency=None):
+    def streaming_session(self, callback,
+                          completion_callback=None,
+                          latency=None):
         return Streaming_Helper(self, callback, completion_callback, latency)
 
     def _stream_flush(self):
@@ -522,15 +614,19 @@ class MD_Dist_Probe:
                 for sample in samples:
                     if not updated_timer:
                         curtime = self.reactor.monotonic()
-                        self.reactor.update_timer(self._stream_timeout_timer,
-                                curtime + STREAM_TIMEOUT)
+                        self.reactor.update_timer(
+                            self._stream_timeout_timer,
+                            curtime + STREAM_TIMEOUT
+                        )
                         updated_timer = True
 
                     self._enrich_sample_temp(sample)
-                    temp = sample['temp']
+                    temp = sample["temp"]
                     if self.model_temp is not None and not (-40 < temp < 180):
-                        msg = ("MD_DIST temperature sensor faulty(read %.2f C),"
-                                " disabling temperaure compensation" % (temp,))
+                        msg = (
+                            "MD_DIST temperature sensor faulty(read %.2f C),"
+                            " disabling temperaure compensation" % (temp,)
+                        )
                         logging.error(msg)
                         self.gcode.respond_raw("!! " + msg + "\n")
                         self.model_temp = None
@@ -541,7 +637,7 @@ class MD_Dist_Probe:
                         self.measured_max = max(self.measured_max, temp)
 
                     self._enrich_sample_time(sample)
-                    self._data_filter.update(sample['time'], sample['data'])
+                    self._data_filter.update(sample["time"], sample["data"])
                     self._enrich_sample_freq(sample)
 
                     if len(self._stream_callbacks) > 0:
@@ -552,7 +648,8 @@ class MD_Dist_Probe:
                 return
 
     def _stream_flush_schedule(self):
-        force = self._stream_en == 0 # When streaming is disabled, let all through
+        # When streaming is disabled, let all through
+        force = self._stream_en == 0
         if self._stream_buffer_limit_new != self._stream_buffer_limit:
             force = True
             self._stream_buffer_limit = self._stream_buffer_limit_new
@@ -574,27 +671,32 @@ class MD_Dist_Probe:
 
     def _get_trapq_position(self, print_time):
         ffi_main, ffi_lib = chelper.get_ffi()
-        data = ffi_main.new('struct pull_move[1]')
-        count = ffi_lib.trapq_extract_old(self.trapq, data, 1, 0., print_time)
+        data = ffi_main.new("struct pull_move[1]")
+        count = ffi_lib.trapq_extract_old(
+            self.trapq, data, 1, 0.0, print_time
+        )
         if not count:
             return None, None
         move = data[0]
-        move_time = max(0., min(move.move_t, print_time - move.print_time))
-        dist = (move.start_v + .5 * move.accel * move_time) * move_time
-        pos = (move.start_x + move.x_r * dist, move.start_y + move.y_r * dist,
-               move.start_z + move.z_r * dist)
+        move_time = max(0.0, min(move.move_t, print_time - move.print_time))
+        dist = (move.start_v + 0.5 * move.accel * move_time) * move_time
+        pos = (
+            move.start_x + move.x_r * dist,
+            move.start_y + move.y_r * dist,
+            move.start_z + move.z_r * dist
+        )
         velocity = move.start_v + move.accel * move_time
         return pos, velocity
 
     def _sample_printtime_sync(self, skip=0, count=1):
-        toolhead = self.printer.lookup_object('toolhead')
+        toolhead = self.printer.lookup_object("toolhead")
         move_time = toolhead.get_last_move_time()
         settle_clock = self._mcu.print_time_to_clock(move_time)
         samples = []
         total = skip + count
 
         def cb(sample):
-            if sample['clock'] >= settle_clock:
+            if sample["clock"] >= settle_clock:
                 samples.append(sample)
                 if len(samples) >= total:
                     raise Stop_Streaming
@@ -611,7 +713,7 @@ class MD_Dist_Probe:
 
     def _sample(self, skip, count):
         samples = self._sample_printtime_sync(skip, count)
-        return (median([s['dist'] for s in samples]), samples)
+        return (median([s["dist"] for s in samples]), samples)
 
     def _sample_async(self, count=1):
         samples = []
@@ -649,8 +751,8 @@ class MD_Dist_Probe:
         if self.model is not None:
             model = self.model.name
         return {
-            'last_sample': self.last_sample,
-            'model': model,
+            "last_sample": self.last_sample,
+            "model": model,
         }
 
     # Webhook handlers
@@ -659,12 +761,12 @@ class MD_Dist_Probe:
         temp = None
         sample = self._sample_async()
         out = {
-            'freq': sample['freq'],
-            'dist': sample['dist'],
+            "freq": sample["freq"],
+            "dist": sample["dist"],
         }
-        temp = sample['temp']
+        temp = sample["temp"]
         if temp is not None:
-            out['temp'] = temp
+            out["temp"] = temp
         web_request.send(out)
 
     def _handle_req_dump(self, web_request):
@@ -684,8 +786,8 @@ class MD_Dist_Probe:
     cmd_MD_DIST_ESTIMATE_BACKLASH_help = "Estimate Z axis backlash"
     def cmd_MD_DIST_ESTIMATE_BACKLASH(self, gcmd):
         # Get to correct Z height
-        overrun = gcmd.get_float('OVERRUN', 1.)
-        speed = gcmd.get_float("PROBE_SPEED", self.speed, above=0.)
+        overrun = gcmd.get_float("OVERRUN", 1.0)
+        speed = gcmd.get_float("PROBE_SPEED", self.speed, above=0.0)
         cur_z = self.toolhead.get_position()[2]
         self.toolhead.manual_move([None, None, cur_z+overrun], speed)
         self.run_probe(gcmd)
@@ -693,7 +795,7 @@ class MD_Dist_Probe:
         lift_speed = self.get_lift_speed(gcmd)
         target = gcmd.get_float('Z', self.trigger_distance)
 
-        num_samples = gcmd.get_int('SAMPLES', 20)
+        num_samples = gcmd.get_int("SAMPLES", 20)
         wait = self.z_settling_time
 
         samples_up = []
@@ -729,29 +831,34 @@ class MD_Dist_Probe:
         res_up = median(samples_up)
         res_down = median(samples_down)
 
-        gcmd.respond_info("Median distance moving up %.5f, down %.5f, "
-                          "delta %.5f over %d samples" %
-                          (res_up, res_down, res_down - res_up,
-                           num_samples))
+        gcmd.respond_info(
+            "Median distance moving up %.5f, down %.5f, "
+            "delta %.5f over %d samples"
+            % (res_up, res_down, res_down - res_up, num_samples)
+        )
 
     cmd_MD_DIST_QUERY_help = "Take a sample from the sensor"
     def cmd_MD_DIST_QUERY(self, gcmd):
         sample = self._sample_async()
-        last_value = sample['freq']
-        dist = sample['dist']
-        temp = sample['temp']
+        last_value = sample["freq"]
+        dist = sample["dist"]
+        temp = sample["temp"]
         self.last_sample = {
-            'time': sample['time'],
-            'value': last_value,
-            'temp': temp,
-            'dist': dist,
+            "time": sample["time"],
+            "value": last_value,
+            "temp": temp,
+            "dist": dist,
         }
         if dist is None:
-            gcmd.respond_info("Last reading: %.2fHz, %.2fC, no model" %
-                              (last_value, temp,))
+            gcmd.respond_info(
+                "Last reading: %.2fHz, %.2fC, no model"
+                % (last_value, temp,)
+            )
         else:
-            gcmd.respond_info("Last reading: %.2fHz, %.2fC, %.5fmm" %
-                              (last_value, temp, dist))
+            gcmd.respond_info(
+                "Last reading: %.2fHz, %.2fC, %.5fmm"
+                % (last_value, temp, dist)
+            )
 
     cmd_MD_DIST_STREAM_help = "Enable MD_DIST Streaming"
     def cmd_MD_DIST_STREAM(self, gcmd):
@@ -767,21 +874,22 @@ class MD_Dist_Probe:
             def close_file():
                 f.close()
             completion_cb = close_file
-            f.write("time,data,data_smooth,freq,dist,temp,pos_x,pos_y,pos_z,vel\n")
+            f.write("time,data,data_smooth,freq,dist,\
+                     temp,pos_x,pos_y,pos_z,vel\n")
 
             def cb(sample):
-                pos = sample.get('pos', None)
+                pos = sample.get("pos", None)
                 obj = "%.4f,%d,%.2f,%.5f,%.5f,%.2f,%s,%s,%s,%s\n" % (
-                    sample['time'],
-                    sample['data'],
-                    sample['data_smooth'],
-                    sample['freq'],
-                    sample['dist'],
-                    sample['temp'],
+                    sample["time"],
+                    sample["data"],
+                    sample["data_smooth"],
+                    sample["freq"],
+                    sample["dist"],
+                    sample["temp"],
                     "%.3f" % (pos[0],) if pos is not None else "",
                     "%.3f" % (pos[1],) if pos is not None else "",
                     "%.3f" % (pos[2],) if pos is not None else "",
-                    "%.3f" % (sample['vel'],) if 'vel' in sample else ""
+                    "%.3f" % (sample["vel"],) if "vel" in sample else ""
                 )
                 f.write(obj)
 
@@ -790,18 +898,20 @@ class MD_Dist_Probe:
 
     cmd_PROBE_ACCURACY_help = "Probe Z-height accuracy at current XY position"
     def cmd_PROBE_ACCURACY(self, gcmd):
-        speed = gcmd.get_float("PROBE_SPEED", self.speed, above=0.)
+        speed = gcmd.get_float("PROBE_SPEED", self.speed, above=0.0)
         lift_speed = self.get_lift_speed(gcmd)
         sample_count = gcmd.get_int("SAMPLES", 10, minval=1)
         sample_retract_dist = gcmd.get_float("SAMPLE_RETRACT_DIST", 0)
-        allow_faulty = gcmd.get_int('ALLOW_FAULTY_COORDINATE', 0) != 0
+        allow_faulty = gcmd.get_int("ALLOW_FAULTY_COORDINATE", 0) != 0
         pos = self.toolhead.get_position()
-        gcmd.respond_info("PROBE_ACCURACY at X:%.3f Y:%.3f Z:%.3f"
-                          " (samples=%d retract=%.3f"
-                          " speed=%.1f lift_speed=%.1f)\n"
-                          % (pos[0], pos[1], pos[2],
-                             sample_count, sample_retract_dist,
-                             speed, lift_speed))
+        gcmd.respond_info(
+            "PROBE_ACCURACY at X:%.3f Y:%.3f Z:%.3f"
+            " (samples=%d retract=%.3f"
+            " speed=%.1f lift_speed=%.1f)\n"
+            % (pos[0], pos[1], pos[2],
+                sample_count, sample_retract_dist,
+                speed, lift_speed)
+        )
 
         start_height = self.trigger_distance + sample_retract_dist
         liftpos = [None, None, start_height]
@@ -824,18 +934,18 @@ class MD_Dist_Probe:
 
         deviation_sum = 0
         for i in range(len(zs)):
-            deviation_sum += pow(zs[2] - avg_value, 2.)
+            deviation_sum += pow(zs[2] - avg_value, 2.0)
         sigma = (deviation_sum / len(zs)) ** 0.5
 
         gcmd.respond_info(
             "probe accuracy results: maximum %.6f, minimum %.6f, range %.6f, "
-            "average %.6f, median %.6f, standard deviation %.6f" % (
-            max_value, min_value, range_value, avg_value, median_, sigma))
+            "average %.6f, median %.6f, standard deviation %.6f"
+            % (max_value, min_value, range_value, avg_value, median_, sigma))
 
     cmd_Z_OFFSET_APPLY_PROBE_help = "Adjust the probe's z_offset"
     def cmd_Z_OFFSET_APPLY_PROBE(self, gcmd):
         gcode_move = self.printer.lookup_object("gcode_move")
-        offset = gcode_move.get_status()['homing_origin'].z
+        offset = gcode_move.get_status()["homing_origin"].z
 
         if offset == 0:
             self.gcode.respond_info("Nothing to do: Z Offset is 0")
@@ -854,19 +964,21 @@ class MD_Dist_Probe:
         old_offset = self.model.offset
         self.model.offset += offset
         self.model.save(self, False)
-        gcmd.respond_info("md_dist model offset has been updated\n"
-                "You must run the SAVE_CONFIG command now to update the\n"
-                "printer config file and restart the printer.")
+        gcmd.respond_info(
+            "md_dist model offset has been updated\n"
+            "You must run the SAVE_CONFIG command now to update the\n"
+            "printer config file and restart the printer."
+        )
         self.model.offset = old_offset
 
 class MD_Dist_Model:
     @classmethod
     def load(cls, name, config, md_dist):
-        coef = config.getfloatlist('model_coef')
-        temp = config.getfloat('model_temp')
-        domain = config.getfloatlist('model_domain', count=2)
-        [min_z, max_z] = config.getfloatlist('model_range', count=2)
-        offset = config.getfloat('model_offset', 0.)
+        coef = config.getfloatlist("model_coef")
+        temp = config.getfloat("model_temp")
+        domain = config.getfloatlist("model_domain", count=2)
+        [min_z, max_z] = config.getfloatlist("model_range", count=2)
+        offset = config.getfloat("model_offset", 0.0)
         poly = Polynomial(coef, domain)
         return MD_Dist_Model(name, md_dist, poly, temp, min_z, max_z, offset)
 
@@ -880,30 +992,32 @@ class MD_Dist_Model:
         self.offset = offset
 
     def save(self, md_dist, show_message=True):
-        configfile = md_dist.printer.lookup_object('configfile')
+        configfile = md_dist.printer.lookup_object("configfile")
         section = "md_dist model " + self.name
-        configfile.set(section, 'model_coef',
+        configfile.set(section, "model_coef",
                        ",\n  ".join(map(str, self.poly.coef)))
-        configfile.set(section, 'model_domain',
+        configfile.set(section, "model_domain",
                        ",".join(map(str, self.poly.domain)))
-        configfile.set(section, 'model_range',
+        configfile.set(section, "model_range",
                        "%f,%f" % (self.min_z, self.max_z))
-        configfile.set(section, 'model_temp',
+        configfile.set(section, "model_temp",
                        "%f" % (self.temp))
-        configfile.set(section, 'model_offset', "%.5f" % (self.offset,))
+        configfile.set(section, "model_offset", "%.5f" % (self.offset,))
         if show_message:
-            md_dist.gcode.respond_info("MD_DIST calibration for model '%s' has "
-                    "been updated\nfor the current session. The SAVE_CONFIG "
-                    "command will\nupdate the printer config file and restart "
-                    "the printer." % (self.name,))
+            md_dist.gcode.respond_info(
+                "MD_DIST calibration for model '%s' has "
+                "been updated\nfor the current session. The SAVE_CONFIG "
+                "command will\nupdate the printer config file and restart "
+                "the printer." % (self.name,)
+            )
 
     def freq_to_dist_raw(self, freq):
         [begin, end] = self.poly.domain
         invfreq = 1/freq
         if invfreq > end:
-            return float('inf')
+            return float("inf")
         elif invfreq < begin:
-            return float('-inf')
+            return float("-inf")
         else:
             return float(self.poly(invfreq) - self.offset)
 
@@ -915,7 +1029,7 @@ class MD_Dist_Model:
     def dist_to_freq_raw(self, dist, max_e=0.00000001):
         if dist < self.min_z or dist > self.max_z:
             msg = ("Attempted to map out-of-range distance %f, valid range "
-                    "[%.3f, %.3f]" % (dist, self.min_z, self.max_z))
+                   "[%.3f, %.3f]" % (dist, self.min_z, self.max_z))
             raise self.md_dist.printer.command_error(msg)
         dist += self.offset
         [begin, end] = self.poly.domain
@@ -923,7 +1037,7 @@ class MD_Dist_Model:
             f = (end + begin) / 2
             v = self.poly(f)
             if abs(v-dist) < max_e:
-                return float(1./f)
+                return float(1.0/f)
             elif v < dist:
                 begin = f
             else:
@@ -938,12 +1052,14 @@ class MD_Dist_Model:
         return freq
 
 class MD_Dist_Temp_Model_Builder:
-    _DEFAULTS = {'amfg': 1.0,
-                'tcc': -1.56165495e-05,
-                'tcfl': -1.11115902e-12,
-                'tctl': 3.6738370e-16,
-                'fmin' : None,
-                'fmin_temp' : None}
+    _DEFAULTS = {
+        "amfg": 1.0,
+        "tcc": -1.56165495e-05,
+        "tcfl": -1.11115902e-12,
+        "tctl": 3.6738370e-16,
+        "fmin" : None,
+        "fmin_temp" : None
+    }
 
     @classmethod
     def load(cls, config):
@@ -952,27 +1068,37 @@ class MD_Dist_Temp_Model_Builder:
     def __init__(self, config):
         self.parameters = MD_Dist_Temp_Model_Builder._DEFAULTS.copy()
         for key in self.parameters.keys():
-            param = config.getfloat('tc_' + key, None)
+            param = config.getfloat("tc_" + key, None)
             if param is not None:
                 self.parameters[key] = param
 
     def build(self):
-        if self.parameters['fmin'] is None or self.parameters['fmin_temp'] is None:
+        if self.parameters["fmin"] is None \
+           or self.parameters["fmin_temp"] is None:
             return None
-        logging.info('MD_DIST: built tempco model %s', self.parameters)
+        logging.info("MD_DIST: built tempco model %s", self.parameters)
         return MD_Dist_Temp_Model(**self.parameters)
 
     def build_with_base(self, md_dist):
         base_data = md_dist.md_dist_base_read_cmd.send([6, 0])
-        (f_count, adc_count) = struct.unpack("<IH", base_data['bytes'])
+        (f_count, adc_count) = struct.unpack("<IH", base_data["bytes"])
         if f_count < 0xFFFFFFFF and adc_count < 0xFFFF:
-            if self.parameters['fmin'] is None:
-                self.parameters['fmin'] = md_dist.count_to_freq(f_count)
-                logging.info("MD_DIST: loaded fmin=%.2f from base", self.parameters['fmin'])
-            if self.parameters['fmin_temp'] is None:
-                temp_adc = float(adc_count) / md_dist.temp_smooth_count * md_dist.inv_adc_max
-                self.parameters['fmin_temp'] = md_dist.thermistor.calc_temp(temp_adc)
-                logging.info("MD_DIST: loaded fmin_temp=%.2f from base", self.parameters['fmin_temp'])
+            if self.parameters["fmin"] is None:
+                self.parameters["fmin"] = md_dist.count_to_freq(f_count)
+                logging.info(
+                    "MD_DIST: loaded fmin=%.2f from base",
+                    self.parameters["fmin"]
+                )
+            if self.parameters["fmin_temp"] is None:
+                temp_adc = float(adc_count) / md_dist.temp_smooth_count * \
+                           md_dist.inv_adc_max
+                self.parameters["fmin_temp"] = md_dist.thermistor.calc_temp(
+                    temp_adc
+                )
+                logging.info(
+                    "MD_DIST: loaded fmin_temp=%.2f from base",
+                    self.parameters["fmin_temp"]
+                )
         else:
             logging.info("MD_DIST: fmin parameters not found in base")
         return self.build()
@@ -1010,19 +1136,27 @@ class MD_Dist_Temp_Model:
 class Model_Manager:
     def __init__(self, md_dist):
         self.md_dist = md_dist
-        self.gcode = md_dist.printer.lookup_object('gcode')
-        self.gcode.register_command('MD_DIST_MODEL_SELECT',
-                                    self.cmd_MD_DIST_MODEL_SELECT,
-                                    desc=self.cmd_MD_DIST_MODEL_SELECT_help)
-        self.gcode.register_command('MD_DIST_MODEL_SAVE',
-                                    self.cmd_MD_DIST_MODEL_SAVE,
-                                    desc=self.cmd_MD_DIST_MODEL_SAVE_help)
-        self.gcode.register_command('MD_DIST_MODEL_REMOVE',
-                                    self.cmd_MD_DIST_MODEL_REMOVE,
-                                    desc=self.cmd_MD_DIST_MODEL_REMOVE_help)
-        self.gcode.register_command('MD_DIST_MODEL_LIST',
-                                    self.cmd_MD_DIST_MODEL_LIST,
-                                    desc=self.cmd_MD_DIST_MODEL_LIST_help)
+        self.gcode = md_dist.printer.lookup_object("gcode")
+        self.gcode.register_command(
+            "MD_DIST_MODEL_SELECT",
+            self.cmd_MD_DIST_MODEL_SELECT,
+            desc=self.cmd_MD_DIST_MODEL_SELECT_help
+        )
+        self.gcode.register_command(
+            "MD_DIST_MODEL_SAVE",
+            self.cmd_MD_DIST_MODEL_SAVE,
+            desc=self.cmd_MD_DIST_MODEL_SAVE_help
+        )
+        self.gcode.register_command(
+            "MD_DIST_MODEL_REMOVE",
+            self.cmd_MD_DIST_MODEL_REMOVE,
+            desc=self.cmd_MD_DIST_MODEL_REMOVE_help
+        )
+        self.gcode.register_command(
+            "MD_DIST_MODEL_LIST",
+            self.cmd_MD_DIST_MODEL_LIST,
+            desc=self.cmd_MD_DIST_MODEL_LIST_help
+        )
 
     cmd_MD_DIST_MODEL_SELECT_help = "Load named md_dist model"
     def cmd_MD_DIST_MODEL_SELECT(self, gcmd):
@@ -1053,13 +1187,15 @@ class Model_Manager:
         model = self.md_dist.models.get(name, None)
         if model is None:
             raise gcmd.error("Unknown model '%s'" % (name,))
-        configfile = self.md_dist.printer.lookup_object('configfile')
+        configfile = self.md_dist.printer.lookup_object("configfile")
         section = "md_dist model " + model.name
         configfile.remove_section(section)
         self.md_dist.models.pop(name)
-        gcmd.respond_info("Model '%s' was removed for the current session.\n"
-                          "Run SAVE_CONFIG to update the printer configuration"
-                          "and restart Klipper." % (name,))
+        gcmd.respond_info(
+            "Model '%s' was removed for the current session.\n"
+            "Run SAVE_CONFIG to update the printer configuration"
+            "and restart Klipper." % (name,)
+        )
         if self.md_dist.model == model:
             self.md_dist.model = None
 
@@ -1181,16 +1317,16 @@ class API_Dump_Helper:
                 self._start_stop()
                 continue
             tmp = dict(template)
-            tmp['params'] = self.buffer
+            tmp["params"] = self.buffer
             cconn.send(tmp)
         self.buffer = []
 
     def add_client(self, web_request):
         cconn = web_request.get_client_connection()
-        template = web_request.get_dict('response_template', {})
+        template = web_request.get_dict("response_template", {})
         self.clients[cconn] = template
         self._start_stop()
-        web_request.send({'header': self.fields})
+        web_request.send({"header": self.fields})
 
 class MD_Dist_Probe_Wrapper:
     def __init__(self, md_dist):
@@ -1216,9 +1352,9 @@ class MD_Dist_Temp_Wrapper:
 
     def get_status(self, eventtime):
         return {
-            'temperature': round(self.md_dist.last_temp, 2),
-            'measured_min_temp': round(self.md_dist.measured_min, 2),
-            'measured_max_temp': round(self.md_dist.measured_max, 2)
+            "temperature": round(self.md_dist.last_temp, 2),
+            "measured_min_temp": round(self.md_dist.measured_min, 2),
+            "measured_max_temp": round(self.md_dist.measured_max, 2)
         }
 
 TRSYNC_TIMEOUT = 0.025
@@ -1230,13 +1366,25 @@ class MD_Dist_Endstop_Wrapper:
         self._mcu = md_dist._mcu
 
         ffi_main, ffi_lib = chelper.get_ffi()
-        self._trdispatch = ffi_main.gc(ffi_lib.trdispatch_alloc(), ffi_lib.free)
+        self._trdispatch = ffi_main.gc(
+            ffi_lib.trdispatch_alloc(),
+            ffi_lib.free
+        )
         self._trsyncs = [MCU_trsync(self.md_dist._mcu, self._trdispatch)]
 
         printer = self.md_dist.printer
-        printer.register_event_handler('klippy:mcu_identify', self._handle_mcu_identify)
-        printer.register_event_handler('homing:home_rails_begin', self._handle_home_rails_begin)
-        printer.register_event_handler('homing:home_rails_end', self._handle_home_rails_end)
+        printer.register_event_handler(
+            "klippy:mcu_identify",
+            self._handle_mcu_identify
+        )
+        printer.register_event_handler(
+            "homing:home_rails_begin",
+            self._handle_home_rails_begin
+        )
+        printer.register_event_handler(
+            "homing:home_rails_end",
+            self._handle_home_rails_end
+        )
 
         self.z_homed = False
         self.is_homing = False
@@ -1261,11 +1409,19 @@ class MD_Dist_Endstop_Wrapper:
         if 2 not in homing_state.get_axes():
             return
 
-        # After homing Z we perform a measurement and adjust the toolhead kinematic position.
-        (dist, samples) = self.md_dist._sample(self.md_dist.z_settling_time, 10)
+        # After homing Z we perform a measurement and 
+        # adjust the toolhead kinematic position.
+        (dist, samples) = self.md_dist._sample(
+            self.md_dist.z_settling_time, 10
+        )
         if math.isinf(dist):
-            logging.error("Post-homing adjustment measured samples %s", samples)
-            raise self.md_dist.printer.command_error("Toolhead stopped below model range")
+            logging.error(
+                "Post-homing adjustment measured samples %s",
+                samples
+            )
+            raise self.md_dist.printer.command_error(
+                "Toolhead stopped below model range"
+            )
         homing_state.set_homed_position([None, None, dist])
 
     def get_mcu(self):
@@ -1282,7 +1438,7 @@ class MD_Dist_Endstop_Wrapper:
         # Check for unsupported multi-mcu shared stepper rails, duplicated
         # from MCU_endstop
         sname = stepper.get_name()
-        if sname.startswith('stepper_'):
+        if sname.startswith("stepper_"):
             for ot in self._trsyncs:
                 for s in ot.get_steppers():
                     if ot is not trsync and s.get_name().startswith(sname[:9]):
@@ -1293,7 +1449,8 @@ class MD_Dist_Endstop_Wrapper:
     def get_steppers(self):
         return [s for trsync in self._trsyncs for s in trsync.get_steppers()]
 
-    def home_start(self, print_time, sample_time, sample_count, rest_time, triggered=True):
+    def home_start(self, print_time, sample_time,
+                   sample_count, rest_time, triggered=True):
         if self.md_dist.model is None:
             raise self.md_dist.printer.command_error("No md_dist model loaded")
 
@@ -1301,15 +1458,24 @@ class MD_Dist_Endstop_Wrapper:
         self.md_dist._apply_threshold()
         self.md_dist._sample_async()
         clock = self._mcu.print_time_to_clock(print_time)
-        rest_ticks = self._mcu.print_time_to_clock(print_time+rest_time) - clock
+        rest_ticks = self._mcu.print_time_to_clock(print_time+rest_time)-clock
         self._rest_ticks = rest_ticks
         reactor = self._mcu.get_printer().get_reactor()
         self._trigger_completion = reactor.completion()
         expire_timeout = TRSYNC_TIMEOUT
         if len(self._trsyncs) == 1:
             expire_timeout = TRSYNC_SINGLE_MCU_TIMEOUT
-        for trsync in self._trsyncs:
-            trsync.start(print_time, self._trigger_completion, expire_timeout)
+        for i, trsync in enumerate(self._trsyncs):
+            try:
+                trsync.start(
+                    print_time, self._trigger_completion, expire_timeout
+                )
+            except TypeError:
+                offset = float(i) / len(self._trsyncs)
+                trsync.start(
+                    print_time, offset, self._trigger_completion,
+                    expire_timeout
+                )
         etrsync = self._trsyncs[0]
         ffi_main, ffi_lib = chelper.get_ffi()
         ffi_lib.trdispatch_start(self._trdispatch, etrsync.REASON_HOST_REQUEST)
@@ -1331,9 +1497,9 @@ class MD_Dist_Endstop_Wrapper:
         ffi_lib.trdispatch_stop(self._trdispatch)
         res = [trsync.stop() for trsync in self._trsyncs]
         if any([r == etrsync.REASON_COMMS_TIMEOUT for r in res]):
-            return -1.
+            return -1.0
         if res[0] != etrsync.REASON_ENDSTOP_HIT:
-            return 0.
+            return 0.0
         if self._mcu.is_fileoutput():
             return home_end_time
         return home_end_time
@@ -1343,7 +1509,7 @@ class MD_Dist_Endstop_Wrapper:
             return 1
         clock = self._mcu.print_time_to_clock(print_time)
         sample = self.md_dist._sample_async()
-        if self.md_dist.trigger_freq <= sample['freq']:
+        if self.md_dist.trigger_freq <= sample["freq"]:
             return 1
         else:
             return 0
@@ -1354,50 +1520,79 @@ class MD_Dist_Endstop_Wrapper:
 class MD_Dist_Mesh_Helper:
     @classmethod
     def create(cls, md_dist, config):
-        if config.has_section('bed_mesh'):
+        if config.has_section("bed_mesh"):
             return MD_Dist_Mesh_Helper(md_dist, config)
         else:
             return None
 
     def __init__(self, md_dist, config):
         self.md_dist = md_dist
-        mesh_config = self.mesh_config = config.getsection('bed_mesh')
-        self.bm = self.md_dist.printer.load_object(mesh_config, 'bed_mesh')
+        mesh_config = self.mesh_config = config.getsection("bed_mesh")
+        self.bm = self.md_dist.printer.load_object(mesh_config, "bed_mesh")
 
-        self.speed = mesh_config.getfloat('speed', 50., above=0., note_valid=False)
-        self.def_min_x, self.def_min_y = mesh_config.getfloatlist('mesh_min', count=2, note_valid=False)
-        self.def_max_x, self.def_max_y = mesh_config.getfloatlist('mesh_max', count=2, note_valid=False)
-        self.def_res_x, self.def_res_y = mesh_config.getintlist('probe_count', count=2, note_valid=False)
-        self.rri = mesh_config.getint('relative_reference_index', None, note_valid=False)
-        self.dir = config.getchoice('mesh_main_direction', {'x': 'x', 'X': 'x', 'y': 'y', 'Y': 'y'}, 'y')
-        self.overscan = config.getfloat('mesh_overscan', -1, minval=0)
-        self.cluster_size = config.getfloat('mesh_cluster_size', 1, minval=0)
-        self.runs = config.getint('mesh_runs', 1, minval=1)
+        self.speed = mesh_config.getfloat(
+            "speed", 50.0, above=0.0, note_valid=False
+        )
+        self.def_min_x, self.def_min_y = mesh_config.getfloatlist(
+            "mesh_min", count=2, note_valid=False
+        )
+        self.def_max_x, self.def_max_y = mesh_config.getfloatlist(
+            "mesh_max", count=2, note_valid=False
+        )
+        self.def_res_x, self.def_res_y = mesh_config.getintlist(
+            "probe_count", count=2, note_valid=False
+        )
+        self.rri = mesh_config.getint(
+            "relative_reference_index", None, note_valid=False
+        )
+        self.dir = config.getchoice(
+            "mesh_main_direction",
+            {'x':'x', 'X':'x', 'y':'y', 'Y':'y'},
+            'y'
+        )
+        self.overscan = config.getfloat("mesh_overscan", -1, minval=0)
+        self.cluster_size = config.getfloat("mesh_cluster_size", 1, minval=0)
+        self.runs = config.getint("mesh_runs", 1, minval=1)
 
         self.faulty_regions = []
         for i in list(range(1, 100, 1)):
-            start = mesh_config.getfloatlist("faulty_region_%d_min" % (i,), None, count=2)
+            start = mesh_config.getfloatlist(
+                "faulty_region_%d_min" % (i,), None, count=2
+            )
             if start is None:
                 break
-            end = mesh_config.getfloatlist("faulty_region_%d_max" % (i,), count=2)
+            end = mesh_config.getfloatlist(
+                "faulty_region_%d_max" % (i,), count=2
+            )
             x_min = min(start[0], end[0])
             x_max = max(start[0], end[0])
             y_min = min(start[1], end[1])
             y_max = max(start[1], end[1])
             self.faulty_regions.append(Region(x_min, x_max, y_min, y_max))
 
-        self.gcode = self.md_dist.printer.lookup_object('gcode')
-        self.prev_gcmd = self.gcode.register_command('BED_MESH_CALIBRATE', None)
-        self.gcode.register_command('BED_MESH_CALIBRATE', self.cmd_BED_MESH_CALIBRATE, desc=self.cmd_BED_MESH_CALIBRATE_help)
+        self.gcode = self.md_dist.printer.lookup_object(
+            "gcode"
+        )
+        self.prev_gcmd = self.gcode.register_command(
+            "BED_MESH_CALIBRATE", None
+        )
+        self.gcode.register_command(
+            "BED_MESH_CALIBRATE",
+            self.cmd_BED_MESH_CALIBRATE,
+            desc=self.cmd_BED_MESH_CALIBRATE_help
+        )
 
         if self.overscan < 0:
             printer = self.md_dist.printer
-            printer.register_event_handler('klippy:mcu_identify', self._handle_mcu_identify)
+            printer.register_event_handler(
+                "klippy:mcu_identify",
+                self._handle_mcu_identify
+            )
 
     cmd_BED_MESH_CALIBRATE_help = "Perform Mesh Bed Leveling"
     def cmd_BED_MESH_CALIBRATE(self, gcmd):
-        method = gcmd.get('METHOD', 'md_dist').lower()
-        if method == 'md_dist':
+        method = gcmd.get("METHOD", "md_dist").lower()
+        if method == "md_dist":
             self.calibrate(gcmd)
         else:
             self.prev_gcmd(gcmd)
@@ -1411,20 +1606,24 @@ class MD_Dist_Mesh_Helper:
         yo = self.md_dist.y_offset
         settings = {
             'x': {
-                'range': [self.def_min_x-xo, self.def_max_x-xo],
-                'machine': [status['axis_minimum'][0], status['axis_maximum'][0]],
-                'count': self.def_res_y,
+                "range": [self.def_min_x-xo,\
+                          self.def_max_x-xo],
+                "machine": [status["axis_minimum"][0],\
+                            status["axis_maximum"][0]],
+                "count": self.def_res_y,
             },
             'y': {
-                'range': [self.def_min_y-yo, self.def_max_y-yo],
-                'machine': [status['axis_minimum'][1], status['axis_maximum'][1]],
-                'count': self.def_res_x,
+                "range": [self.def_min_y-yo,\
+                          self.def_max_y-yo],
+                "machine": [status["axis_minimum"][1],\
+                            status["axis_maximum"][1]],
+                "count": self.def_res_x,
             }
         }[self.dir]
 
-        r = settings['range']
-        m = settings['machine']
-        space = (r[1] - r[0]) / (float(settings['count']-1))
+        r = settings["range"]
+        m = settings["machine"]
+        space = (r[1] - r[0]) / (float(settings["count"]-1))
         self.overscan = min([
             max(0, r[0]-m[0]),
             max(0, m[1]-r[1]),
@@ -1436,28 +1635,28 @@ class MD_Dist_Mesh_Helper:
         yo = self.md_dist.y_offset
         settings = {
             'x': {
-                'range_aligned': [self.min_x-xo, self.max_x-xo],
-                'range_perpendicular': [self.min_y-yo, self.max_y-yo],
-                'count': self.res_y,
-                'swap_coord': False,
+                "range_aligned": [self.min_x-xo, self.max_x-xo],
+                "range_perpendicular": [self.min_y-yo, self.max_y-yo],
+                "count": self.res_y,
+                "swap_coord": False,
             },
             'y': {
-                'range_aligned': [self.min_y-yo, self.max_y-yo],
-                'range_perpendicular': [self.min_x-xo, self.max_x-xo],
-                'count': self.res_x,
-                'swap_coord': True,
+                "range_aligned": [self.min_y-yo, self.max_y-yo],
+                "range_perpendicular": [self.min_x-xo, self.max_x-xo],
+                "count": self.res_x,
+                "swap_coord": True,
             }
         }[self.dir]
 
         # We build the path in "normalized" coordinates and then simply
         # swap x and y at the end if we need to
-        begin_a, end_a = settings['range_aligned']
-        begin_p, end_p = settings['range_perpendicular']
-        swap_coord = settings['swap_coord']
-        step = (end_p - begin_p) / (float(settings['count']-1))
+        begin_a, end_a = settings["range_aligned"]
+        begin_p, end_p = settings["range_perpendicular"]
+        swap_coord = settings["swap_coord"]
+        step = (end_p - begin_p) / (float(settings["count"]-1))
         points = []
         corner_radius = min(step/2, self.overscan)
-        for i in range(0, settings['count']):
+        for i in range(0, settings["count"]):
             pos_p = begin_p + step * i
             even = i % 2 == 0 # If even we are going 'right', else 'left'
             pa = (begin_a, pos_p) if even else (end_a, pos_p)
@@ -1480,12 +1679,24 @@ class MD_Dist_Mesh_Helper:
                 # the endpoints of the lines connecting everything.
                 if even:
                     center = begin_a - self.overscan + corner_radius
-                    points += arc_points(center, pos_p - step + corner_radius, corner_radius, -90, -90)
-                    points += arc_points(center, pos_p - corner_radius, corner_radius, -180, -90)
+                    points += arc_points(
+                        center, pos_p - step + corner_radius,
+                        corner_radius, -90, -90
+                    )
+                    points += arc_points(
+                        center, pos_p - corner_radius,
+                        corner_radius, -180, -90
+                    )
                 else:
                     center = end_a + self.overscan - corner_radius
-                    points += arc_points(center, pos_p - step + corner_radius, corner_radius, -90, 90)
-                    points += arc_points(center, pos_p - corner_radius, corner_radius, 0, 90)
+                    points += arc_points(
+                        center, pos_p - step + corner_radius,
+                        corner_radius, -90, 90
+                    )
+                    points += arc_points(
+                        center, pos_p - corner_radius,
+                        corner_radius, 0, 90
+                    )
 
             points.append(l[0])
             points.append(l[1])
@@ -1498,17 +1709,30 @@ class MD_Dist_Mesh_Helper:
         return points
 
     def calibrate(self, gcmd):
-        self.min_x, self.min_y = coord_fallback(gcmd, "MESH_MIN", float,
-                self.def_min_x, self.def_min_y, lambda v, d: max(v, d))
-        self.max_x, self.max_y = coord_fallback(gcmd, "MESH_MAX", float,
-                self.def_max_x, self.def_max_y, lambda v, d: min(v, d))
-        self.res_x, self.res_y = coord_fallback(gcmd, "PROBE_COUNT", int,
-                self.def_res_x, self.def_res_y, lambda v, _d: max(v, 3))
+        self.min_x, self.min_y = coord_fallback(
+            gcmd, "MESH_MIN", float,
+            self.def_min_x, self.def_min_y, lambda v, d: max(v, d)
+        )
+        self.max_x, self.max_y = coord_fallback(
+            gcmd, "MESH_MAX", float,
+            self.def_max_x, self.def_max_y, lambda v, d: min(v, d)
+        )
+        self.res_x, self.res_y = coord_fallback(
+            gcmd, "PROBE_COUNT", int,
+            self.def_res_x, self.def_res_y, lambda v, _d: max(v, 3)
+        )
+        self.profile_name = gcmd.get("PROFILE", "default")
 
         if self.min_x > self.max_x:
-            self.min_x, self.max_x = (max(self.max_x, self.def_min_x), min(self.min_x, self.def_max_x))
+            self.min_x, self.max_x = (
+                max(self.max_x, self.def_min_x),
+                min(self.min_x, self.def_max_x)
+            )
         if self.min_y > self.max_y:
-            self.min_y, self.max_y = (max(self.max_y, self.def_min_y), min(self.min_y, self.def_max_y))
+            self.min_y, self.max_y = (
+                max(self.max_y, self.def_min_y),
+                min(self.min_y, self.def_max_y)
+            )
 
         self.step_x = (self.max_x - self.min_x) / (self.res_x - 1)
         self.step_y = (self.max_y - self.min_y) / (self.res_y - 1)
@@ -1516,10 +1740,13 @@ class MD_Dist_Mesh_Helper:
         self.toolhead = self.md_dist.toolhead
         path = self._generate_path()
 
-        probe_speed = gcmd.get_float("PROBE_SPEED", self.md_dist.speed, above=0.)
+        probe_speed = gcmd.get_float(
+            "PROBE_SPEED",
+            self.md_dist.speed, above=0.0
+        )
         self.md_dist._move_to_probing_height(probe_speed)
 
-        speed = gcmd.get_float("SPEED", self.speed, above=0.)
+        speed = gcmd.get_float("SPEED", self.speed, above=0.0)
         runs = gcmd.get_int("RUNS", self.runs, minval=1)
 
         try:
@@ -1538,16 +1765,26 @@ class MD_Dist_Mesh_Helper:
 
         clusters = self._interpolate_faulty(clusters)
         self._apply_mesh(clusters, gcmd)
-        
-        if(self.md_dist.end_park_x is not None and self.md_dist.end_park_y is not None):
+
+        if(self.md_dist.end_park_x is not None \
+           and self.md_dist.end_park_y is not None):
             if(self.md_dist.first_move_axis == 'x'):
-                self.toolhead.manual_move([self.md_dist.end_park_x, None, None], speed)
+                self.toolhead.manual_move(
+                    [self.md_dist.end_park_x, None, None],
+                    speed
+                )
                 self.toolhead.wait_moves()
             else:
-                self.toolhead.manual_move([None, self.md_dist.end_park_y, None], speed)
+                self.toolhead.manual_move(
+                    [None, self.md_dist.end_park_y, None],
+                    speed
+                )
                 self.toolhead.wait_moves()
 
-            self.toolhead.manual_move([self.md_dist.end_park_x, self.md_dist.end_park_y, None], speed)
+            self.toolhead.manual_move(
+                [self.md_dist.end_park_x, self.md_dist.end_park_y, None],
+                speed
+            )
             self.toolhead.wait_moves()
 
     def _fly_path(self, path, speed, runs):
@@ -1562,7 +1799,7 @@ class MD_Dist_Mesh_Helper:
         return self.min_x <= x <= self.max_x and self.min_y <= y <= self.min_y
 
     def _sample_mesh(self, gcmd, path, speed, runs):
-        cs = gcmd.get_float("CLUSTER_SIZE", self.cluster_size, minval=0.)
+        cs = gcmd.get_float("CLUSTER_SIZE", self.cluster_size, minval=0.0)
 
         min_x, min_y = self.min_x, self.min_y
         xo, yo = self.md_dist.x_offset, self.md_dist.y_offset
@@ -1573,8 +1810,8 @@ class MD_Dist_Mesh_Helper:
 
         def cb(sample):
             total_samples[0] += 1
-            d = sample['dist']
-            (x, y, z) = sample['pos']
+            d = sample["dist"]
+            (x, y, z) = sample["pos"]
             x += xo
             y += yo
 
@@ -1606,10 +1843,16 @@ class MD_Dist_Mesh_Helper:
         with self.md_dist.streaming_session(cb) as ss:
             self._fly_path(path, speed, runs)
 
-        gcmd.respond_info("Sampled %d total points over %d runs" % (total_samples[0], runs))
+        gcmd.respond_info(
+            "Sampled %d total points over %d runs" % (total_samples[0], runs)
+        )
         if invalid_samples[0]:
-            gcmd.respond_info("!! Encountered %d invalid samples!" % (invalid_samples[0],))
-        gcmd.respond_info("Samples binned in %d clusters" % (len(clusters),))
+            gcmd.respond_info(
+                "!! Encountered %d invalid samples!" % (invalid_samples[0],)
+            )
+        gcmd.respond_info(
+            "Samples binned in %d clusters" % (len(clusters),)
+        )
 
         return clusters
 
@@ -1644,7 +1887,8 @@ class MD_Dist_Mesh_Helper:
             y += dy
             while (x >= 0 and x <= xi_max and y >= 0 and y <= yi_max):
                 if clusters[(x, y)] is not None:
-                    return (abs(x-start[0])+abs(y-start[0]), median(clusters[(x,y)]))
+                    return (abs(x-start[0])+abs(y-start[0]), \
+                            median(clusters[(x,y)]))
                 x += dx
                 y += dy
             return None
@@ -1657,7 +1901,8 @@ class MD_Dist_Mesh_Helper:
             elif lower is not None and higher is None:
                 return lower[1]
             else:
-                return ((lower[1] * lower[0] + higher[1] * higher[0]) / (lower[0] + higher[0]))
+                return ((lower[1] * lower[0] + higher[1] * higher[0]) \
+                        / (lower[0] + higher[0]))
 
         for coord in faulty_indexes:
             xl = get_nearest(coord, -1,  0)
@@ -1687,15 +1932,20 @@ class MD_Dist_Mesh_Helper:
                 if cluster is None or len(cluster) == 0:
                     xc = xi * self.step_x + self.min_x
                     yc = yi * self.step_y + self.min_y
-                    logging.info("Cluster (%.3f,%.3f)[%d,%d] is empty!" % (xc, yc, xi, yi))
-                    err = ("Empty clusters found\n"
-                           "Try increasing mesh cluster_size or slowing down")
+                    logging.info(
+                        "Cluster (%.3f,%.3f)[%d,%d] is empty!"
+                        % (xc, yc, xi, yi)
+                    )
+                    err = (
+                        "Empty clusters found\n"
+                        "Try increasing mesh cluster_size or slowing down"
+                    )
                     raise self.gcode.error(err)
                 data = [td-d for d in cluster]
                 line.append(median(data))
             matrix.append(line)
 
-        rri = gcmd.get_int('RELATIVE_REFERENCE_INDEX', self.rri)
+        rri = gcmd.get_int("RELATIVE_REFERENCE_INDEX", self.rri)
         if rri is not None:
             if rri < 0 or rri >= self.res_x * self.res_y:
                 rri = None
@@ -1708,20 +1958,23 @@ class MD_Dist_Mesh_Helper:
                 matrix[i] = [z-z_offset for z in line]
 
         params = self.bm.bmc.mesh_config
-        params['min_x'] = self.min_x
-        params['max_x'] = self.max_x
-        params['min_y'] = self.min_y
-        params['max_y'] = self.max_y
-        params['x_count'] = self.res_x
-        params['y_count'] = self.res_y
-        mesh = bed_mesh.ZMesh(params)
+        params["min_x"] = self.min_x
+        params["max_x"] = self.max_x
+        params["min_y"] = self.min_y
+        params["max_y"] = self.max_y
+        params["x_count"] = self.res_x
+        params["y_count"] = self.res_y
+        try:
+            mesh = bed_mesh.ZMesh(params)
+        except:
+            mesh = bed_mesh.ZMesh(params, self.profile_name)
         try:
             mesh.build_mesh(matrix)
         except bed_mesh.BedMeshError as e:
             raise self.gcode.error(str(e))
         self.bm.set_mesh(mesh)
         self.gcode.respond_info("Mesh calibration complete")
-        self.bm.save_profile(gcmd.get('PROFILE', "default"))
+        self.bm.save_profile(self.profile_name)
 
 class Region:
     def __init__(self, x_min, x_max, y_min, y_max):
@@ -1731,7 +1984,8 @@ class Region:
         self.y_max = y_max
 
     def is_point_within(self, x, y):
-        return ((x > self.x_min and x < self.x_max) and (y > self.y_min and y < self.y_max))
+        return ((x > self.x_min and x < self.x_max) \
+                and (y > self.y_min and y < self.y_max))
 
 def arc_points(cx, cy, r, start_angle, span):
     # Angle delta is determined by a max deviation(md) from 0.1mm:
@@ -1773,20 +2027,21 @@ def median(samples):
 
 def load_config(config):
     md_dist = MD_Dist_Probe(config)
-    config.get_printer().add_object('probe', MD_Dist_Probe_Wrapper(md_dist))
+    config.get_printer().add_object("probe", MD_Dist_Probe_Wrapper(md_dist))
     temp = MD_Dist_Temp_Wrapper(md_dist)
-    config.get_printer().add_object('temperature_sensor MD_DIST', temp)
-    pheaters = md_dist.printer.load_object(config, 'heaters')
-    pheaters.available_sensors.append('temperature_sensor MD_DIST')
+    config.get_printer().add_object("temperature_sensor MD_DIST", temp)
+    pheaters = md_dist.printer.load_object(config, "heaters")
+    pheaters.available_sensors.append("temperature_sensor MD_DIST")
     return md_dist
 
 def load_config_prefix(config):
-    md_dist = config.get_printer().lookup_object('md_dist')
+    md_dist = config.get_printer().lookup_object("md_dist")
     name = config.get_name()
-    if name.startswith('md_dist model '):
+    if name.startswith("md_dist model "):
         name = name[14:]
         model = MD_Dist_Model.load(name, config, md_dist)
         md_dist._register_model(name, model)
         return model
     else:
-        raise config.error("Unknown MD_DIST config directive '%s'" % (name[7:],))
+        raise config.error("Unknown MD_DIST config directive '%s'"
+              % (name[7:],))
