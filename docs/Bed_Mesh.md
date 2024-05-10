@@ -44,10 +44,9 @@ probe_count: 5, 3
 
 - `mesh_max: 240, 198`\
   _Required_\
-  The probed coordinate farthest farthest from the origin.  This is not
-  necessarily the last point probed, as the probing process occurs in a
-  zig-zag fashion.  As with `mesh_min`, this coordinate is relative to
-  the probe's location.
+  The probed coordinate farthest from the origin.  This is not necessarily
+  the last point probed, as the probing process occurs in a zig-zag fashion.
+  As with `mesh_min`, this coordinate is relative to the probe's location.
 
 - `probe_count: 5, 3`\
   _Default Value: 3, 3_\
@@ -542,11 +541,19 @@ This gcode may be used to clear the internal mesh state.
 
 ### Apply X/Y offsets
 
-`BED_MESH_OFFSET [X=<value>] [Y=<value>]`
+`BED_MESH_OFFSET [X=<value>] [Y=<value>] [ZFADE=<value>]`
 
 This is useful for printers with multiple independent extruders, as an offset
 is necessary to produce correct Z adjustment after a tool change.  Offsets
 should be specified relative to the primary extruder.  That is, a positive
 X offset should be specified if the secondary extruder is mounted to the
-right of the primary extruder, and a positive Y offset should be specified
-if the secondary extruder is mounted "behind" the primary extruder.
+right of the primary extruder, a positive Y offset should be specified
+if the secondary extruder is mounted "behind" the primary extruder, and
+a positive ZFADE offset should be specified if the secondary extruder's
+nozzle is above the primary extruder's.
+
+Note that a ZFADE offset does *NOT* directly apply additional adjustment.  It
+is intended to compensate for a `gcode offset` when [mesh fade](#mesh-fade)
+is enabled.  For example, if a secondary extruder is higher than the primary
+and needs a negative gcode offset, ie: `SET_GCODE_OFFSET Z=-.2`, it can be
+accounted for in `bed_mesh` with `BED_MESH_OFFSET ZFADE=.2`.
