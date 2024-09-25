@@ -75,7 +75,7 @@ class MD_Dist_Probe:
         )
 
         self.end_park_x, self.end_park_y = config.getfloatlist(
-            "end_park_pos", count=2
+            "end_park_pos", [None, None], count=2
         )
         self.first_move_axis = config.getchoice(
             "first_move_axis", {'x':'x', 'X':'x', 'y':'y', 'Y':'y'}, 'y'
