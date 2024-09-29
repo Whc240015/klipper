@@ -80,6 +80,9 @@ class MD_Dist_Probe:
         self.first_move_axis = config.getchoice(
             "first_move_axis", {'x':'x', 'X':'x', 'y':'y', 'Y':'y'}, 'y'
         )
+        self.enable_temp_compensate = config.getboolean(
+            "enable_temp_compensate", True
+        )
 
         # Load models
         self.model = None
@@ -990,6 +993,7 @@ class MD_Dist_Model:
         self.max_z = max_z
         self.temp = temp
         self.offset = offset
+        self.enable_temp_compensate = md_dist.enable_temp_compensate
 
     def save(self, md_dist, show_message=True):
         configfile = md_dist.printer.lookup_object("configfile")
@@ -1022,7 +1026,9 @@ class MD_Dist_Model:
             return float(self.poly(invfreq) - self.offset)
 
     def freq_to_dist(self, freq, temp):
-        if self.temp is not None and self.md_dist.model_temp is not None:
+        if (self.temp is not None
+            and self.md_dist.model_temp is not None
+            and self.enable_temp_compensate):
             freq = self.md_dist.model_temp.compensate(freq, temp, self.temp)
         return self.freq_to_dist_raw(freq)
 
@@ -1047,7 +1053,9 @@ class MD_Dist_Model:
 
     def dist_to_freq(self, dist, temp, max_e=0.00000001):
         freq = self.dist_to_freq_raw(dist, max_e)
-        if self.temp is not None and self.md_dist.model_temp is not None:
+        if (self.temp is not None
+            and self.md_dist.model_temp is not None
+            and self.enable_temp_compensate):
             freq = self.md_dist.model_temp.compensate(freq, self.temp, temp)
         return freq
 
