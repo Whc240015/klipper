@@ -33,6 +33,9 @@ class HallFilamentWidthSensor:
         self.runout_dia_min=config.getfloat('min_diameter', 1.0)
         self.runout_dia_max=config.getfloat('max_diameter', self.max_diameter)
         self.is_log =config.getboolean('logging', False)
+        self.report_time = config.getfloat('report_time', ADC_REPORT_TIME)
+        self.sample_time = config.getfloat('sample_time', ADC_SAMPLE_TIME)
+        self.sample_count = config.getint('sample_count', ADC_SAMPLE_COUNT)
         # Use the current diameter instead of nominal while the first
         # measurement isn't in place
         self.use_current_dia_while_delay = config.getboolean(
@@ -49,12 +52,12 @@ class HallFilamentWidthSensor:
         # Start adc
         self.ppins = self.printer.lookup_object('pins')
         self.mcu_adc = self.ppins.setup_pin('adc', self.pin1)
-        self.mcu_adc.setup_adc_sample(ADC_SAMPLE_TIME, ADC_SAMPLE_COUNT)
-        self.mcu_adc.setup_adc_callback(ADC_REPORT_TIME, self.adc_callback)
+        self.mcu_adc.setup_adc_sample(self.sample_time, self.sample_count)
+        self.mcu_adc.setup_adc_callback(self.report_time, self.adc_callback)
         if self.pin2 is not None:
             self.mcu_adc2 = self.ppins.setup_pin('adc', self.pin2)
-            self.mcu_adc2.setup_adc_sample(ADC_SAMPLE_TIME, ADC_SAMPLE_COUNT)
-            self.mcu_adc2.setup_adc_callback(ADC_REPORT_TIME, self.adc2_callback)
+            self.mcu_adc2.setup_adc_sample(self.sample_time, self.sample_count)
+            self.mcu_adc2.setup_adc_callback(self.report_time, self.adc2_callback)
         # extrude factor updating
         self.extrude_factor_update_timer = self.reactor.register_timer(
             self.extrude_factor_update_event)

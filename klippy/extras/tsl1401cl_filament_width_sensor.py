@@ -31,10 +31,13 @@ class FilamentWidthSensor:
         self.toolhead = self.ppins = self.mcu_adc = None
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
         # Start adc
+        self.report_time = config.getfloat('report_time', ADC_REPORT_TIME)
+        self.sample_time = config.getfloat('sample_time', ADC_SAMPLE_TIME)
+        self.sample_count = config.getint('sample_count', ADC_SAMPLE_COUNT)
         self.ppins = self.printer.lookup_object('pins')
         self.mcu_adc = self.ppins.setup_pin('adc', self.pin)
-        self.mcu_adc.setup_adc_sample(ADC_SAMPLE_TIME, ADC_SAMPLE_COUNT)
-        self.mcu_adc.setup_adc_callback(ADC_REPORT_TIME, self.adc_callback)
+        self.mcu_adc.setup_adc_sample(self.sample_time, self.sample_count)
+        self.mcu_adc.setup_adc_callback(self.report_time, self.adc_callback)
         # extrude factor updating
         self.extrude_factor_update_timer = self.reactor.register_timer(
             self.extrude_factor_update_event)
