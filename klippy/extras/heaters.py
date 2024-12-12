@@ -3,7 +3,7 @@
 # Copyright (C) 2016-2020  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import os, logging, threading
+import os, logging, threading, bisect
 
 
 ######################################################################
@@ -65,6 +65,9 @@ class Heater:
                                    desc=self.cmd_SET_HEATER_TEMPERATURE_help)
         self.printer.register_event_handler("klippy:shutdown",
                                             self._handle_shutdown)
+        # 添加温度补偿支持
+        self.temp_comp = None
+        self.temp_comp_enabled = False  # 默认禁用
     def set_pwm(self, read_time, value):
         if self.target_temp <= 0. or self.is_shutdown:
             value = 0.
@@ -102,22 +105,47 @@ class Heater:
     def get_smooth_time(self):
         return self.smooth_time
     def set_temp(self, degrees):
+        """设置目标温度，应用温度补偿"""
+        display_temp = degrees  # 用户设置的显示温度
+        logging.info("Setting temperature for %s - Requested temp: %.1f", 
+                    self.name, display_temp)
+        
+        if degrees and self.temp_comp and self.temp_comp_enabled:
+            # 应用温度补偿,将显示温度转换为控制温度
+            control_temp = self.temp_comp.get_control_temp(display_temp)
+            logging.info("Temperature compensation for %s: display_temp=%.1f -> control_temp=%.1f",
+                        self.name, display_temp, control_temp)
+            degrees = control_temp  # 将控制温度置给加热器
+        
+        # 检查温度范围(使用控制温度检查)
         if degrees and (degrees < self.min_temp or degrees > self.max_temp):
             raise self.printer.command_error(
                 "Requested temperature (%.1f) out of range (%.1f:%.1f)"
                 % (degrees, self.min_temp, self.max_temp))
         with self.lock:
-            self.target_temp = degrees
+            self.target_temp = degrees  # 存储控制温度
+            self.display_target_temp = display_temp  # 存储显示温度
     def get_temp(self, eventtime):
+        """获取当前温度和目标温度"""
         print_time = self.mcu_pwm.get_mcu().estimated_print_time(eventtime) - 5.
         with self.lock:
             if self.last_temp_time < print_time:
-                return 0., self.target_temp
-            return self.smoothed_temp, self.target_temp
+                return 0., getattr(self, 'display_target_temp', 0.)
+            
+            current_temp = self.smoothed_temp
+            target_temp = getattr(self, 'display_target_temp', self.target_temp)
+            
+            # 如果启用了温度补偿，转换显示温度
+            if self.temp_comp and self.temp_comp_enabled:
+                current_temp = self.temp_comp.get_display_temp(current_temp)
+            
+            return current_temp, target_temp
     def check_busy(self, eventtime):
         with self.lock:
-            return self.control.check_busy(
-                eventtime, self.smoothed_temp, self.target_temp)
+            temp = self.smoothed_temp
+            target = self.target_temp
+            # 注意：这里使用实际温度进行比较，不需要转换
+            return self.control.check_busy(eventtime, temp, target)
     def set_control(self, control):
         with self.lock:
             old_control = self.control
@@ -130,24 +158,55 @@ class Heater:
         self.target_temp = target_temp
     def stats(self, eventtime):
         with self.lock:
-            target_temp = self.target_temp
-            last_temp = self.last_temp
+            target_temp = getattr(self, 'display_target_temp', self.target_temp)
+            current_temp = self.smoothed_temp
+            
+            # 如果启用了温度补偿，转换显示温度
+            if self.temp_comp and self.temp_comp_enabled:
+                current_temp = self.temp_comp.get_display_temp(current_temp)
+            
             last_pwm_value = self.last_pwm_value
-        is_active = target_temp or last_temp > 50.
+            
+        is_active = target_temp or current_temp > 50.
         return is_active, '%s: target=%.0f temp=%.1f pwm=%.3f' % (
-            self.short_name, target_temp, last_temp, last_pwm_value)
+            self.short_name, target_temp, current_temp, last_pwm_value)
     def get_status(self, eventtime):
         with self.lock:
-            target_temp = self.target_temp
-            smoothed_temp = self.smoothed_temp
-            last_pwm_value = self.last_pwm_value
-        return {'temperature': round(smoothed_temp, 2), 'target': target_temp,
-                'power': last_pwm_value}
+            target_temp = getattr(self, 'display_target_temp', self.target_temp)
+            current_temp = self.smoothed_temp
+            pwm = float(self.last_pwm_value)
+            
+            # 如果启用了温度补偿，转换显示温度
+            if self.temp_comp and self.temp_comp_enabled:
+                current_temp = self.temp_comp.get_display_temp(current_temp)
+        
+        return {
+            'temperature': round(current_temp, 2),  # 显示转换后的当前温度
+            'target': target_temp,                  # 显示用户设置的目标温度
+            'power': pwm
+        }
     cmd_SET_HEATER_TEMPERATURE_help = "Sets a heater temperature"
     def cmd_SET_HEATER_TEMPERATURE(self, gcmd):
         temp = gcmd.get_float('TARGET', 0.)
         pheaters = self.printer.lookup_object('heaters')
         pheaters.set_temperature(self, temp)
+    def set_temp_comp(self, temp_comp):
+        """设置温度补偿对象"""
+        self.temp_comp = temp_comp
+    
+    def enable_temp_comp(self):
+        """启用温度补偿"""
+        self.temp_comp_enabled = True
+        logging.info("Temperature compensation enabled for %s", self.name)
+    
+    def disable_temp_comp(self):
+        """禁用温度补偿"""
+        self.temp_comp_enabled = False
+        logging.info("Temperature compensation disabled for %s", self.name)
+    
+    def is_temp_comp_enabled(self):
+        """返回温度补偿是否启用"""
+        return self.temp_comp_enabled
 
 
 ######################################################################
