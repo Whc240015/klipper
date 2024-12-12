@@ -442,6 +442,13 @@ class PrinterHeaters:
             print_time = toolhead.get_last_move_time()
             gcmd.respond_raw(self._get_temp(eventtime))
             eventtime = reactor.pause(eventtime + 1.)
+    def get_all_temp_comps(self):
+        """Return list of all temperature compensation instances"""
+        temp_comps = []
+        for heater in self.heaters.values():
+            if heater.temp_comp is not None:
+                temp_comps.append(heater.temp_comp)
+        return temp_comps
 
 def load_config(config):
     return PrinterHeaters(config)

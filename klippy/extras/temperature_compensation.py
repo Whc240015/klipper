@@ -172,17 +172,37 @@ class TemperatureCompensation:
             'active': self.heater.is_temp_comp_enabled() if self.heater else False
         }
     
-    cmd_SET_TEMP_COMPENSATION_help = "Enable/disable temperature compensation"
+    cmd_SET_TEMP_COMPENSATION_help = "Enable/disable temperature compensation for specified heater"
     def cmd_SET_TEMP_COMPENSATION(self, gcmd):
-        if self.heater is None:
+        # 获取指定的加热器名称，如果没有指定则使用当前实例的加热器
+        heater_name = gcmd.get('HEATER', self.name)
+        
+        # 获取所有温度补偿实例
+        pheaters = self.printer.lookup_object('heaters')
+        all_temp_comps = pheaters.get_all_temp_comps()
+        
+        # 查找指定加热器的温度补偿实例
+        temp_comp = None
+        for comp in all_temp_comps:
+            if comp.name == heater_name:
+                temp_comp = comp
+                break
+                
+        if temp_comp is None:
+            raise gcmd.error("No temperature compensation found for heater '%s'" % heater_name)
+            
+        if temp_comp.heater is None:
             raise gcmd.error("No heater connected for temperature compensation")
+            
+        # 设置启用状态
         value = gcmd.get_int('ENABLE', 1)
         if value:
-            self.heater.enable_temp_comp()
+            temp_comp.heater.enable_temp_comp()
         else:
-            self.heater.disable_temp_comp()
+            temp_comp.heater.disable_temp_comp()
+            
         gcmd.respond_info("Temperature compensation for %s %s" % 
-                         (self.name, "enabled" if value else "disabled"))
+                         (heater_name, "enabled" if value else "disabled"))
     
     def get_control_temp(self, target_temp):
         """Convert target temperature to control temperature"""
