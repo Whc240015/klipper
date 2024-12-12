@@ -10,68 +10,48 @@ class TemperatureCompensation:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.name = config.get_name().split()[-1]
-        
-        # 获取加热器的最大温度限制
-        try:
-            heater_config = config.getsection(self.name)
-            self.max_temp = heater_config.getfloat('max_temp', above=0.)
-        except Exception:
-            raise config.error("Unable to load heater '%s' config" % (self.name,))
-        
-        # 加载温度补偿表 (显示温度:实际温度)
+        self.enabled = config.getboolean('enabled', False)
         self.temp_table = []
+        
+        # 解析温度补偿表
         try:
             temp_comp_str = config.get('temperature_compensation')
-            # 解析温度补偿表
+            # 按行分割并解析每一行
             for line in temp_comp_str.split('\n'):
                 line = line.strip()
                 if not line or line.startswith('#'):
                     continue
                 try:
-                    displayed_temp, actual_temp = [float(x.strip()) for x in line.split(':')]
-                    self.temp_table.append((displayed_temp, actual_temp))
+                    # 分割并转换为浮点数
+                    display_temp, actual_temp = [float(x.strip()) for x in line.split(':')]
+                    self.temp_table.append((display_temp, actual_temp))
                 except Exception as e:
                     raise config.error(
                         "Invalid temperature compensation value '%s': %s" % (line, str(e)))
         except Exception as e:
-            raise config.error("Error loading temperature compensation table: %s" % str(e))
+            raise config.error(
+                "Error loading temperature compensation table: %s" % str(e))
         
         # 按显示温度排序
-        self.temp_table.sort()
-        if not self.temp_table:
-            return
+        if self.temp_table:
+            self.temp_table.sort()  # 按显示温度排序
+            self.displayed_temps = [t[0] for t in self.temp_table]
+            self.actual_temps = [t[1] for t in self.temp_table]
+            logging.info("Loaded temperature compensation table for %s: %s",
+                        self.name, self.temp_table)
         
-        # 验证温度补偿表中的温度不超过最大温度
-        for display_temp, actual_temp in self.temp_table:
-            if actual_temp > self.max_temp:
-                raise config.error(
-                    "Temperature compensation actual temperature %.1f exceeds "
-                    "maximum temperature %.1f" % (actual_temp, self.max_temp))
+        self.heater = None
+        self.printer.register_event_handler("klippy:connect", 
+                                          self._handle_connect)
         
-        # 创建反向映射表 (实际温度:显示温度)
-        self.reverse_table = [(actual, display) for display, actual in self.temp_table]
-        self.reverse_table.sort()  # 按实际温度排序
-        
-        self.displayed_temps = [t[0] for t in self.temp_table]
-        self.actual_temps = [t[1] for t in self.temp_table]
-        self.reverse_actuals = [t[0] for t in self.reverse_table]
-        self.reverse_displays = [t[1] for t in self.reverse_table]
-        
-        # 获取对应的加热器对象
-        self.printer.register_event_handler("klippy:connect", self._handle_connect)
-        
-        # 默认禁用温度补偿
-        self.enabled = config.getboolean('enabled', False)
-        
-        logging.info("Loaded temperature compensation table for %s: %s", 
-                    self.name, str(self.temp_table))
-        
-        # 注册G-code命令 - 只在第一个实例时注册
-        if self.name == config.get_name().split()[-1]:
-            gcode = self.printer.lookup_object('gcode')
+        # 注册G-code命令 - 只在第一个温度补偿实例时注册
+        gcode = self.printer.lookup_object('gcode')
+        if not hasattr(gcode, '_temp_compensation_cmd_registered'):
             gcode.register_command('SET_TEMP_COMPENSATION',
                                  self.cmd_SET_TEMP_COMPENSATION,
                                  desc=self.cmd_SET_TEMP_COMPENSATION_help)
+            # 标记命令已注册
+            gcode._temp_compensation_cmd_registered = True
     
     def _handle_connect(self):
         # Connect to the corresponding heater
