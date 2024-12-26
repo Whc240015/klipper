@@ -572,7 +572,13 @@ class PrinterProbe:
     def get_offsets(self):
         return self.probe_offsets.get_offsets()
     def get_status(self, eventtime):
-        return self.cmd_helper.get_status(eventtime)
+        # return self.cmd_helper.get_status(eventtime)
+        res = dict(self.cmd_helper.get_status(eventtime))
+        x_offset, y_offset, z_offset = self.get_offsets()
+        res.update({
+            'offsets': {'x': x_offset, 'y': y_offset, 'z': z_offset}
+        })
+        return res
     def start_probe_session(self, gcmd):
         return self.probe_session.start_probe_session(gcmd)
 
