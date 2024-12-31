@@ -3,15 +3,15 @@
 # Copyright (C) 2016-2018  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import math, logging
+import math, logging, threading
 from . import heaters
 
 class PIDCalibrate:
     def __init__(self, config):
         self.printer = config.get_printer()
-        gcode = self.printer.lookup_object('gcode')
-        gcode.register_command('PID_CALIBRATE', self.cmd_PID_CALIBRATE,
-                               desc=self.cmd_PID_CALIBRATE_help)
+        self.gcode = self.printer.lookup_object('gcode')
+        self.gcode.register_command('PID_CALIBRATE', self.cmd_PID_CALIBRATE,
+                                  desc=self.cmd_PID_CALIBRATE_help)
     cmd_PID_CALIBRATE_help = "Run PID calibration test"
     def cmd_PID_CALIBRATE(self, gcmd):
         heater_name = gcmd.get('HEATER')
@@ -22,6 +22,15 @@ class PIDCalibrate:
             heater = pheaters.lookup_heater(heater_name)
         except self.printer.config_error as e:
             raise gcmd.error(str(e))
+        
+        # 保存温度补偿的原始状态
+        temp_comp_enabled = False
+        if hasattr(heater, 'temp_comp') and heater.temp_comp is not None:
+            temp_comp_enabled = heater.is_temp_comp_enabled()
+            if temp_comp_enabled:
+                logging.info("Temporarily disabling temperature compensation for PID calibration")
+                heater.disable_temp_comp()
+        
         self.printer.lookup_object('toolhead').get_last_move_time()
         calibrate = ControlAutoTune(heater, target)
         old_control = heater.set_control(calibrate)
@@ -30,7 +39,18 @@ class PIDCalibrate:
         except self.printer.command_error as e:
             heater.set_control(old_control)
             raise
-        heater.set_control(old_control)
+        finally:
+            # 先将温度设为0并等待一段时间
+            pheaters.set_temperature(heater, 0.)
+            
+            # 恢复原始控制器
+            heater.set_control(old_control)
+            
+            # 最后恢复温度补偿状态
+            if hasattr(heater, 'temp_comp') and heater.temp_comp is not None and temp_comp_enabled:
+                logging.info("Restoring temperature compensation state")
+                heater.enable_temp_comp()
+        
         if write_file:
             calibrate.write_file('/tmp/heattest.txt')
         if calibrate.check_busy(0., 0., 0.):
