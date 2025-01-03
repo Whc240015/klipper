@@ -176,6 +176,10 @@ class PrinterExtruder:
             or config.get('rotation_distance', None) is not None):
             self.extruder_stepper = ExtruderStepper(config)
             self.extruder_stepper.stepper.set_trapq(self.trapq)
+        #---------------------------------------------------------------------------
+        self.can_multi_sync = config.getboolean("can_multi_sync", False)
+        self.sync_steppers = {}
+        #---------------------------------------------------------------------------
         # Register commands
         gcode = self.printer.lookup_object('gcode')
         if self.name == 'extruder':
@@ -190,6 +194,8 @@ class PrinterExtruder:
     def get_status(self, eventtime):
         sts = self.heater.get_status(eventtime)
         sts['can_extrude'] = self.heater.can_extrude
+        sts['sync_stepper'] = {'can_multi_sync': self.can_multi_sync,
+                               'steppers': self.sync_steppers}
         if self.extruder_stepper is not None:
             sts.update(self.extruder_stepper.get_status(eventtime))
         return sts
@@ -282,6 +288,25 @@ class PrinterExtruder:
         toolhead.flush_step_generation()
         toolhead.set_extruder(self, self.last_position)
         self.printer.send_event("extruder:activate_extruder")
+    
+    #---------------------------------------------------------------------------
+    def add_sync_stepper(self, name, obj):
+        if name in self.sync_steppers:
+            raise self.config_error(
+                "The '%s' stepper has been synchronized" % (name,))
+        self.sync_steppers[name] = obj
+    def del_sync_stepper(self, name):
+        if name in self.sync_steppers:
+            del self.sync_steppers[name]
+    def get_sync_steppers(self):
+        return self.sync_steppers
+    def get_sync_stepper(self, name):
+        if name in self.sync_steppers:
+            return True
+        return False
+    def has_multi_sync(self):
+        return self.can_multi_sync
+    #---------------------------------------------------------------------------
 
 # Dummy extruder class used when a printer has no extruder at all
 class DummyExtruder:

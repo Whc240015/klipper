@@ -49,6 +49,7 @@ class GCodeMove:
         self.saved_states = {}
         self.move_transform = self.move_with_transform = None
         self.position_with_transform = (lambda: [0., 0., 0., 0.])
+        self.extruder_stepper_dir = 0
     def _handle_ready(self):
         self.is_printer_ready = True
         if self.move_transform is None:
@@ -125,12 +126,28 @@ class GCodeMove:
                         self.last_position[pos] = v + self.base_position[pos]
             if 'E' in params:
                 v = float(params['E']) * self.extrude_factor
+                extruder = self.printer.lookup_object('toolhead').get_extruder()
                 if not self.absolute_coord or not self.absolute_extrude:
                     # value relative to position of last move
+                    history_e = self.last_position[3]
                     self.last_position[3] += v
                 else:
                     # value relative to base coordinate position
+                    history_e = 0.
                     self.last_position[3] = v + self.base_position[3]
+                if (self.last_position[3]-(history_e) > 0.000001) and (self.extruder_stepper_dir != 1):
+                    self.extruder_stepper_dir = 1
+                    sync_steppers = extruder.get_sync_steppers().copy()
+                    for name, obj_name in sync_steppers.items():
+                        obj = self.printer.lookup_object(obj_name)
+                        obj.do_sync_advance_move(self.extruder_stepper_dir)
+                elif (self.last_position[3]-(history_e) < -0.000001) and (self.extruder_stepper_dir != -1):
+                    self.extruder_stepper_dir = -1
+                    sync_steppers = extruder.get_sync_steppers().copy()
+                    for name, obj_name in sync_steppers.items():
+                        obj = self.printer.lookup_object(obj_name)
+                        obj.do_sync_advance_move(self.extruder_stepper_dir)
+                    
             if 'F' in params:
                 gcode_speed = float(params['F'])
                 if gcode_speed <= 0.:
