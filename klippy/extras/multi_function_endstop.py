@@ -39,6 +39,7 @@ class MultiFunctionEndstop:
         self.endstops.append((self.mcu_endstop, name))
         query_endstops = self.printer.load_object(config, 'query_endstops')
         query_endstops.register_endstop(self.mcu_endstop, name)
+        self.manual_probe = self.printer.load_object(config, 'manual_probe')
 
         # get samples
         self.samples = config.getint('samples', 1, minval=1)
@@ -194,7 +195,6 @@ class MultiFunctionEndstop:
                 self.stepper_objects[self.axis] = stepper
                 self.mcu_endstop.add_stepper(stepper)
                 flag = 1
-                break
         if not flag:
             # raise error("Can't find the %s axis!" % (self.axis,))
             self.stepper_objects[self.axis] = None
@@ -452,45 +452,6 @@ class MultiFunctionEndstop:
         self.logger.info(f"Average measured height: {average_height}")
         return average_height
 
-    # def _probe(self, speed):
-    #     self.logger.info(f"Probing at speed: {speed}")
-    #     toolhead = self.printer.lookup_object('toolhead')
-    #     phoming = self.printer.lookup_object('homing')
-    #     curpos = toolhead.get_position()
-    #     self.logger.info(f"Current position before probe: {curpos}")
-    #     pos = curpos[:]
-    #     pos[2] = self.switch_position[2]
-    #     self.logger.info(f"Target probe position: {pos}")
-        
-    #     self.logger.info(f"Z axis steppers: {self.z_steppers}")
-        
-    #     # 创建一个新的 MCU_Endstop 对象，包含 Z 轴步进电机
-    #     for stepper in self.z_steppers:
-    #         self.mcu_endstop.add_stepper(stepper)
-        
-    #     try:
-    #         epos = phoming.probing_move(self.mcu_endstop, pos, speed)
-    #     except self.printer.command_error as e:
-    #         reason = str(e)
-    #         if "Timeout during endstop homing" in reason:
-    #             reason += "\nMake sure the optical switch is connected and functioning correctly."
-    #         self.logger.error(f"Error during probing move: {reason}")
-    #         raise self.printer.command_error(reason)
-    #     self.logger.info(f"Probe successful, position: {epos}")
-    #     return epos
-
-    # def _retract(self, pos):
-    #     self.logger.info(f"Retracting by {self.sample_retract_dist}mm")
-    #     toolhead = self.printer.lookup_object('toolhead')
-    #     retract_pos = list(pos)
-    #     retract_pos[2] += self.sample_retract_dist
-    #     try:
-    #         toolhead.move(retract_pos, self.lift_speed)
-    #         toolhead.wait_moves()
-    #     except self.printer.command_error as e:
-    #         self.logger.error(f"Error during retraction: {str(e)}")
-    #         raise
-
     cmd_MFE_CALIBRATION_TOOLHEAD_Z_OFFSET_help = "Calibrate the height "\
         "difference between two nozzles"
     def cmd_MFE_CALIBRATION_TOOLHEAD_Z_OFFSET(self, gcmd):
@@ -582,7 +543,6 @@ class MultiFunctionEndstop:
             
         logging.info(("detection toolhead position:%s-->%s" %
                      (pos, touch_pos,)))
-        pos_info = 0
         samples_sum = 0
         retract_len = self.retract_dir * self.sample_retract_dist
         extend_len = self.extend_dir * self.sample_extend_compensation
@@ -610,13 +570,13 @@ class MultiFunctionEndstop:
                 self._move(retract_pos, self.lift_speed)
             # 计算下一次触摸终结位置
             touch_pos[axis_to_num] = (epos[axis_to_num] + extend_len)
-        
+
         # 记录位置信息, 打印信息?
         touch_pos[axis_to_num] = samples_sum/samples
         self.stepper_map['toolhead_offsets']['touch_pos'] = touch_pos[:]
         # logging.info("%s axis touch pos %s" % (self.axis, self.stepper_map))
         return touch_pos[axis_to_num]
-        
+
     def _detection_probe(self, gcmd, samples):
         curtime = self.printer.get_reactor().monotonic()
         axis_minimum = self.toolhead.get_status(curtime)["axis_minimum"]
@@ -634,10 +594,9 @@ class MultiFunctionEndstop:
             touch_pos[axis_to_num] = max(
                 (touch_pos[axis_to_num] + self.move_distance),
                 axis_minimum[axis_to_num])
-            
+
         logging.info(("detection probe position:%s --> %s" %
                      (pos, touch_pos,)))
-        pos_info = 0
         samples_sum = 0
         retract_len = self.retract_dir * self.sample_retract_dist
         extend_len = self.extend_dir * self.sample_extend_compensation
@@ -665,7 +624,7 @@ class MultiFunctionEndstop:
                 self._move(retract_pos, self.lift_speed)
             # 计算下一次触摸终结位置
             touch_pos[axis_to_num] = (epos[axis_to_num] + extend_len)
-        
+
         # 记录位置信息, 打印信息?
         touch_pos[axis_to_num] = samples_sum/samples
         self.stepper_map['probe_offsets']['touch_pos'] = touch_pos[:]
@@ -677,20 +636,22 @@ class MultiFunctionEndstop:
         z_offset = offset
         configfile = self.printer.lookup_object('configfile')
         configfile.set(name, 'z_offset', "%.3f" % (z_offset,))
+        msg = ""
         if endstop_offset is not None:
             configfile.set('stepper_z', 'position_endstop',
-                           "%.3f" % (endstop_offset, ))
-        gcmd.respond_info(
-            "%s: z_offset: %.3f\n"
+                           "%.3f" % (endstop_offset,))
+            msg = "stepper_z: position_endstop=%.3f\n" % (endstop_offset,)
+        gcmd.respond_info(msg+
+            "%s: z_offset=%.3f\n"
             "The SAVE_CONFIG command will update the printer config file\n"
-            "with the above and restart the printer." % (name, z_offset))
+            "with the above and restart the printer." % (name, z_offset,))
 
     cmd_MFE_CALIBRATION_PROBE_OFFSET_help = "Automatic calibration of z offset"
     def cmd_MFE_CALIBRATION_PROBE_OFFSET(self, gcmd):
         try:
             # 开始前的准备
             self.activate_gcode.run_gcode_from_command()
-            
+
             self.logger.info("Starting probe offset calibration")
             probe_info = self.printer.lookup_object(
                 self.stepper_map['probe_offsets']['probe_object'], None)
@@ -721,50 +682,34 @@ class MultiFunctionEndstop:
             park_pos_y = gcmd.get_float('Y', switch_position[1])
             park_pos_z = gcmd.get_float('Z', switch_position[2])
             park_pos_f = gcmd.get_int('F', (self.speed * 60))
-            the_samples = gcmd.get_int('samples', self.samples)
+            the_samples = gcmd.get_int('SAMPLES', self.samples, minval=1)
             if ((park_pos_x is None) or
                 (park_pos_y is None) or
                 (park_pos_z is None)):
                 raise gcmd.error(
                     ("Unknown position: %s" %
                     ([str(park_pos_x), str(park_pos_y), str(park_pos_z)],)))
-            
+
             bed_mesh = self.printer.lookup_object('bed_mesh', default=None)
+            bed_mesh_name = None
             if bed_mesh is not None:
                 bed_mesh_name = bed_mesh.get_mesh()
                 bed_mesh.set_mesh(None)
-            
+
             # 通过G0指令将打印头移动到指定位置
-            self.gcode.run_script_from_command("G0 Z%.2f F%d" % (
-                park_pos_z, park_pos_f,))
+            self.gcode.run_script_from_command("G0 Z%.2f F%d" %
+                (park_pos_z, park_pos_f,))
             self.gcode.run_script_from_command("M400")
-            self.gcode.run_script_from_command("G0 X%.2f Y%.2f F%d" % (
-                park_pos_x, park_pos_y, park_pos_f,))
+            self.gcode.run_script_from_command("G0 X%.2f Y%.2f F%d" %
+                (park_pos_x, park_pos_y, park_pos_f,))
             self.gcode.run_script_from_command("M400")
-            
+
             # 开始测试喷嘴位置
             nozzle_zero = self._detection_toolhead(gcmd, the_samples)
-            
+
             # 探针检测前的准备
             self.probe_activate_gcode.run_gcode_from_command()
             x_offset, y_offset, z_offset = probe_info.get_offsets()
-            # 是否需要先复位一次探针?
-            endstop_offset = None
-            home_zero = []
-            homing_pos = self.stepper_map['probe_offsets']['homing_pos']
-            if ((homing_pos[0] is not None) and (homing_pos[1] is not None)):
-                homing_pos_x = homing_pos[0] - x_offset
-                homing_pos_y = homing_pos[1] - y_offset
-                self.gcode.run_script_from_command("G0 Z%.2f F%d" % (
-                    park_pos_z, park_pos_f,))
-                self.gcode.run_script_from_command("M400")
-                self.gcode.run_script_from_command("G0 X%.2f Y%.2f F%d" % (
-                    homing_pos_x, homing_pos_y, park_pos_f,))
-                self.gcode.run_script_from_command("M400")
-                home_zero = probe.run_single_probe(probe_info, gcmd)[:]
-                endstop_offset = home_zero[2]
-                self.logger.info("probe_home_pos:[%.3f, %.3f, %.3f]" %
-                                  (home_zero[0], home_zero[1], home_zero[2],))
             # 移动探针到指定位置
             park_pos_x -= (x_offset + self.switch_offsets[0])
             park_pos_y -= (y_offset + self.switch_offsets[1])
@@ -773,21 +718,36 @@ class MultiFunctionEndstop:
                              "park_pos:[%.3f, %.3f, %.3f]" %
                              (x_offset, y_offset, z_offset,
                               self.switch_offsets,
-                              park_pos_x, park_pos_y, park_pos_z))
+                              park_pos_x, park_pos_y, park_pos_z,))
             # park_pos_z -= (z_offset + self.switch_offsets[2])
-            self.gcode.run_script_from_command("G0 Z%.2f F%d" % (
-                park_pos_z, park_pos_f,))
+            self.gcode.run_script_from_command("G0 Z%.2f F%d" %
+                (park_pos_z, park_pos_f,))
             self.gcode.run_script_from_command("M400")
-            self.gcode.run_script_from_command("G0 X%.2f Y%.2f F%d" % (
-                park_pos_x, park_pos_y, park_pos_f,))
+            self.gcode.run_script_from_command("G0 X%.2f Y%.2f F%d" %
+                (park_pos_x, park_pos_y, park_pos_f,))
             self.gcode.run_script_from_command("M400")
-            
-            # 通过移动距离计算后续位置
             # 开始测试探针位置
             probe_zero = self._detection_probe(gcmd, the_samples)
+            # 是否需要复位探针?
+            endstop_offset = None
+            home_zero = []
+            homing_pos = self.stepper_map['probe_offsets']['homing_pos']
+            if ((homing_pos[0] is not None) and (homing_pos[1] is not None)):
+                homing_pos_x = homing_pos[0] - x_offset
+                homing_pos_y = homing_pos[1] - y_offset
+                self.gcode.run_script_from_command("G0 Z%.2f F%d" %
+                    (park_pos_z, park_pos_f,))
+                self.gcode.run_script_from_command("M400")
+                self.gcode.run_script_from_command("G0 X%.2f Y%.2f F%d" %
+                    (homing_pos_x, homing_pos_y, park_pos_f,))
+                self.gcode.run_script_from_command("M400")
+                home_zero = probe.run_single_probe(probe_info, gcmd)[:]
+                endstop_offset = home_zero[2]
+                self.logger.info("probe_home_pos:[%.3f, %.3f, %.3f]" %
+                    (home_zero[0], home_zero[1], home_zero[2],))
             # 探针检测后的收尾
             self.probe_deactivate_gcode.run_gcode_from_command()
-            
+
             # 结束后的收尾
             self.deactivate_gcode.run_gcode_from_command()
             # 保存
@@ -798,13 +758,24 @@ class MultiFunctionEndstop:
                 (probe_zero, self.switch_offsets[2], nozzle_zero,
                  probe_zoffset,))
             if endstop_offset is not None:
-                endstop_offset -= probe_zoffset
-                self.logger.info(
-                    "probe_zoffset(%.3f) - probe_home_z(%.3f) "
-                    "= z_endstop_offset(%.3f)" %
-                    (probe_zoffset, home_zero[2], endstop_offset,))
+                old_z_endstop_offset = self.manual_probe.z_position_endstop
+                if old_z_endstop_offset is not None:
+                    endstop_offset = (old_z_endstop_offset +
+                            probe_zoffset - home_zero[2])
+                    self.logger.info(
+                        "old_z_endstop_offset(%.3f) + "
+                        "probe_zoffset(%.3f) - probe_home_z(%.3f) "
+                        "= z_endstop_offset(%.3f)" %
+                        (old_z_endstop_offset,
+                        probe_zoffset, home_zero[2],
+                        endstop_offset,))
+                else:
+                    endstop_offset = None
+
             self._save_probe_offset(gcmd, name, probe_zoffset, endstop_offset)
-            
+            if bed_mesh_name is not None:
+                bed_mesh.set_mesh(bed_mesh_name)
+
         except Exception as e:
             self.logger.error(f"Error during calibration: {str(e)}",
                               exc_info=True)
