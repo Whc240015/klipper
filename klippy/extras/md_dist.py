@@ -784,8 +784,9 @@ class MD_Dist_Probe:
             model = self.model.name
         x_offset, y_offset, z_offset = self.get_offsets()
         return {
-            "last_sample": self.last_sample,
-            "model": model,
+            'name': self.name,
+            'last_sample': self.last_sample,
+            'model': model,
             'offsets': {'x': x_offset, 'y': y_offset, 'z': z_offset}
         }
 
@@ -1381,6 +1382,8 @@ class MD_Dist_Probe_Wrapper:
         return self.md_dist.get_lift_speed(gcmd)
     def run_probe(self, gcmd):
         return self.md_dist.run_probe(gcmd)
+    def get_status(self, eventtime):
+        return self.md_dist.get_status(eventtime)
 
 class MD_Dist_Temp_Wrapper:
     def __init__(self, md_dist):
@@ -1998,7 +2001,7 @@ class MD_Dist_Mesh_Helper:
             for i, line in enumerate(matrix):
                 matrix[i] = [z-z_offset for z in line]
 
-        params = self.bm.bmc.mesh_config
+        params = dict(self.bm.bmc.mesh_config)
         params["min_x"] = self.min_x
         params["max_x"] = self.max_x
         params["min_y"] = self.min_y

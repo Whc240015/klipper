@@ -885,7 +885,7 @@ class ProbeManager:
         if method == "rapid_scan" and can_scan:
             self.rapid_scan_helper.perform_rapid_scan(gcmd)
         elif use_md_dist:
-            pprobe.mesh_helper.cmd_BED_MESH_CALIBRATE(gcmd)
+            pprobe.md_dist.mesh_helper.cmd_BED_MESH_CALIBRATE(gcmd)
         else:
             self.probe_helper.start_probe(gcmd)
 
