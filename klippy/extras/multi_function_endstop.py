@@ -590,10 +590,8 @@ class MultiFunctionEndstop:
         for num in list(range(0, samples, 1)):
             # 开始去触碰endstop
             try:
-                # epos = self.mcu_endstop.touch_move(
-                #     touch_pos, self.move_speed)
                 epos = self.manual_home_to_endstop(list(self.endstops),
-                        touch_pos, self.move_speed)
+                        touch_pos, self.detection_speed)
             except self.printer.command_error as e:
                 reason = str(e)
                 if "Timeout during endstop homing" in reason:
@@ -609,7 +607,7 @@ class MultiFunctionEndstop:
             if (self.sample_retract_dist > 0.000001):
                 retract_pos[axis_to_num] = (
                     epos[axis_to_num] + retract_len)
-                self._move(retract_pos, self.move_speed)
+                self._move(retract_pos, self.lift_speed)
             # 计算下一次触摸终结位置
             touch_pos[axis_to_num] = (epos[axis_to_num] + extend_len)
         
@@ -647,10 +645,8 @@ class MultiFunctionEndstop:
         for num in list(range(0, samples, 1)):
             # 开始去触碰endstop
             try:
-                # epos = self.mcu_endstop.touch_move(
-                #     touch_pos, self.move_speed)
                 epos = self.manual_home_to_endstop(list(self.endstops),
-                        touch_pos, self.move_speed)
+                        touch_pos, self.detection_speed)
             except self.printer.command_error as e:
                 reason = str(e)
                 if "Timeout during endstop homing" in reason:
@@ -666,7 +662,7 @@ class MultiFunctionEndstop:
             if (self.sample_retract_dist > 0.000001):
                 retract_pos[axis_to_num] = (
                     epos[axis_to_num] + retract_len)
-                self._move(retract_pos, self.move_speed)
+                self._move(retract_pos, self.lift_speed)
             # 计算下一次触摸终结位置
             touch_pos[axis_to_num] = (epos[axis_to_num] + extend_len)
         
@@ -675,63 +671,6 @@ class MultiFunctionEndstop:
         self.stepper_map['probe_offsets']['touch_pos'] = touch_pos[:]
         # logging.info("%s axis touch pos %s" % (self.axis, self.stepper_map))
         return touch_pos[axis_to_num]
-
-    # def _detection_probe_home(self, gcmd, samples):
-    #     curtime = self.printer.get_reactor().monotonic()
-    #     axis_minimum = self.toolhead.get_status(curtime)["axis_minimum"]
-    #     axis_maximum = self.toolhead.get_status(curtime)["axis_maximum"]
-    #     axis_to_num = ord(self.axis) - ord('x')
-    #     pos = self.toolhead.get_position()
-    #     retract_pos = list(pos)
-    #     touch_pos = list(pos)
-    #     # 防越界
-    #     if (self.move_distance >= 0):
-    #         touch_pos[axis_to_num] = min(
-    #             (touch_pos[axis_to_num] + self.move_distance),
-    #             axis_maximum[axis_to_num])
-    #     else:
-    #         touch_pos[axis_to_num] = max(
-    #             (touch_pos[axis_to_num] + self.move_distance),
-    #             axis_minimum[axis_to_num])
-            
-    #     logging.info(("detection probe position:%s --> %s" %
-    #                  (pos, touch_pos,)))
-    #     pos_info = 0
-    #     samples_sum = 0
-    #     retract_len = self.retract_dir * self.sample_retract_dist
-    #     extend_len = self.extend_dir * self.sample_extend_compensation
-    #     # 重复获取样本
-    #     for num in list(range(0, samples, 1)):
-    #         # 开始去触碰endstop
-    #         try:
-    #             # epos = self.mcu_endstop.touch_move(
-    #             #     touch_pos, self.move_speed)
-    #             epos = self.manual_home_to_endstop(list(self.endstops),
-    #                     touch_pos, self.move_speed)
-    #         except self.printer.command_error as e:
-    #             reason = str(e)
-    #             if "Timeout during endstop homing" in reason:
-    #                 reason += HINT_TIMEOUT
-    #             raise self.printer.command_error(reason)
-    #         # Allow axis_twist_compensation to update results
-    #         # self.printer.send_event("probe:update_results", epos)
-    #         # Report results
-    #         gcmd.respond_info("MFE %s trigger : %.3f" %
-    #                            (self.axis, epos[axis_to_num],))
-    #         samples_sum += epos[axis_to_num]
-    #         # 回缩
-    #         if (self.sample_retract_dist > 0.000001):
-    #             retract_pos[axis_to_num] = (
-    #                 epos[axis_to_num] + retract_len)
-    #             self._move(retract_pos, self.move_speed)
-    #         # 计算下一次触摸终结位置
-    #         touch_pos[axis_to_num] = (epos[axis_to_num] + extend_len)
-        
-    #     # 记录位置信息, 打印信息?
-    #     touch_pos[axis_to_num] = samples_sum/samples
-    #     self.stepper_map['probe_offsets']['touch_pos'] = touch_pos[:]
-    #     # logging.info("%s axis touch pos %s" % (self.axis, self.stepper_map))
-    #     return touch_pos[axis_to_num]
 
     def _save_probe_offset(self, gcmd, name, offset,
                            endstop_offset=None):
