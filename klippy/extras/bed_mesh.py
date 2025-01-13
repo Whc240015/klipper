@@ -238,7 +238,8 @@ class BedMesh:
             "mesh_max": (0., 0.),
             "probed_matrix": [[]],
             "mesh_matrix": [[]],
-            "profiles": self.pmgr.get_profiles()
+            "profiles": self.pmgr.get_profiles(),
+            "probe_name": self.probe_object,
         }
         if self.z_mesh is not None:
             params = self.z_mesh.get_mesh_params()
