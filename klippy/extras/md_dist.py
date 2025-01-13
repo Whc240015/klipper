@@ -198,6 +198,14 @@ class MD_Dist_Probe:
                 self.cmd_Z_OFFSET_APPLY_PROBE,
                 desc=self.cmd_Z_OFFSET_APPLY_PROBE_help
             )
+        else:
+            # If z_virtual_endstop is not used,
+            # the z_offset_apply of md_dist needs to be preserved
+            self.gcode.register_command(
+                "Z_OFFSET_APPLY_MD_DIST",
+                self.cmd_Z_OFFSET_APPLY_PROBE,
+                desc=self.cmd_Z_OFFSET_APPLY_PROBE_help
+            )
 
     # Event handlers
     def _handle_connect(self):
