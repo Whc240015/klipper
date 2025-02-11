@@ -149,7 +149,7 @@ class InputShaper:
         if failed_shapers:
             error = error or self.printer.command_error
             raise error("""{"code":"key25", "msg":"Failed to configure shaper(s) %s with given parameters", "values": ["%s"]}"""
-                        % (', '.join([s.get_name() for s in failed]), ', '.join([s.get_name() for s in failed])))
+                        % (', '.join([s.get_name() for s in failed_shapers]), ', '.join([s.get_name() for s in failed_shapers])))
 
     def disable_shaping(self):
         for shaper in self.shapers:
