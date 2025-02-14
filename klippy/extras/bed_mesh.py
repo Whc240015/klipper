@@ -900,7 +900,7 @@ class ProbeManager:
         return self.substitutes
 
     def generate_points(
-        self, mesh_config, mesh_min, mesh_max, radius, origin,error,
+        self, mesh_config, mesh_min, mesh_max, radius, origin,
         probe_method="automatic"
     ):
         x_cnt = mesh_config['x_count']
@@ -913,7 +913,7 @@ class ProbeManager:
         x_dist = math.floor(x_dist * 100) / 100
         y_dist = math.floor(y_dist * 100) / 100
         if x_dist < 1. or y_dist < 1.:
-            raise error("""{"code":"key43", "msg":"bed_mesh: min/max points too close together", "values": []}""")
+           raise BedMeshError("""{"code":"key43", "msg":"bed_mesh: min/max points too close together", "values": []}""")
         
         if radius is not None:
             # round bed, min/max needs to be recalculated
