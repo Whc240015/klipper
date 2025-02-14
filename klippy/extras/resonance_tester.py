@@ -201,8 +201,8 @@ class ResonanceTester:
                 for chip_axis, aclient, chip_name in raw_values:
                     if not aclient.has_valid_samples():
                         raise gcmd.error(
-						        """{"code":"key56", "msg":"accelerometer '%s' measured no data", "values": ["%s"]}""" % (
-                                    chip_name, chip_name))
+						    """{"code":"key56", "msg":"accelerometer '%s' measured no data", "values": ["%s"]}""" % (
+                                chip_name, chip_name))
                     new_data = helper.process_accelerometer_data(aclient)
                     if calibration_data[axis] is None:
                         calibration_data[axis] = new_data

@@ -3,7 +3,7 @@
 # Copyright (C) 2018-2024  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import os, sys, logging, io, re
+import os, sys, logging, io
 
 VALID_GCODE_EXTS = ['gcode', 'g', 'gco']
 
@@ -241,6 +241,11 @@ class VirtualSD:
                 # Read more data
                 try:
                     data = self.current_file.read(8192)
+                except UnicodeDecodeError as err:
+                    logging.exception(err)
+                    err_msg = '{"code": "key571", "msg": "File UnicodeDecodeError"}'
+                    self.gcode.respond_info(err_msg)
+                    raise self.printer.command_error(err_msg)
                 except:
                     logging.exception("virtual_sdcard read")
                     break

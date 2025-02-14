@@ -900,7 +900,7 @@ class ProbeManager:
         return self.substitutes
 
     def generate_points(
-        self, mesh_config, mesh_min, mesh_max, radius, origin,error,
+        self, mesh_config, mesh_min, mesh_max, radius, origin,
         probe_method="automatic"
     ):
         x_cnt = mesh_config['x_count']
@@ -913,7 +913,7 @@ class ProbeManager:
         x_dist = math.floor(x_dist * 100) / 100
         y_dist = math.floor(y_dist * 100) / 100
         if x_dist < 1. or y_dist < 1.:
-            raise error("""{"code":"key43", "msg":"bed_mesh: min/max points too close together", "values": []}""")
+           raise BedMeshError("""{"code":"key43", "msg":"bed_mesh: min/max points too close together", "values": []}""")
         
         if radius is not None:
             # round bed, min/max needs to be recalculated
@@ -956,7 +956,7 @@ class ProbeManager:
         self.base_points = points
         self.substitutes.clear()
         # adjust overshoot
-        og_min_x = self.orig_config["probed_matrix"][0]
+        og_min_x = self.orig_config["mesh_min"][0]
         og_max_x = self.orig_config["mesh_max"][0]
         add_ovs = min(max(0, min_x - og_min_x), max(0, og_max_x - max_x))
         self.overshoot = self.cfg_overshoot + math.floor(add_ovs)

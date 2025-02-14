@@ -94,6 +94,7 @@ class HomingMove:
             self.toolhead.drip_move(movepos, speed, all_endstop_trigger)
         except self.printer.command_error as e:
             error = """{"code":"key20", "msg":"Error during homing move: %s", "values": [%s]}""" % (str(e),str(e))
+            logging.info("No trigger on %s after full movement, set MOTOR_STALL_MODE DATA=2"%name)
         # Wait for endstops to trigger
         trigger_times = {}
         move_end_print_time = self.toolhead.get_last_move_time()
@@ -108,6 +109,7 @@ class HomingMove:
                 trigger_times[name] = trigger_time
             elif trigger_time < 0. and error is None:
                error = """{"code":"key21", "msg":"Communication timeout during homing %s", "values": ["%s"]}""" % (name, name)
+               logging.info("Communication timeout during homing %s, set MOTOR_STALL_MODE DATA=2"%name)
             elif check_triggered and error is None:
                error = """{"code":"key22", "msg":"No trigger on %s after full movement", "values": ["%s"]}""" % (name, name)
         # Determine stepper halt positions

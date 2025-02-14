@@ -118,8 +118,6 @@ class GCodeMacro:
     def __init__(self, config):
         if len(config.get_name().split()) > 2:
             raise config.error(
-                    # "Name of section '%s' contains illegal whitespace"
-                    # % (config.get_name())
                     """{"code":"key166", "msg": "Name of section '%s' contains illegal whitespace", "values": ["%s"]}""" % (
                         config.get_name(), config.get_name(),
                     )
@@ -136,7 +134,6 @@ class GCodeMacro:
             if (self.gcode.is_traditional_gcode(self.alias)
                 != self.gcode.is_traditional_gcode(self.rename_existing)):
                 raise config.error(
-                    # "G-Code macro rename of different types ('%s' vs '%s')"
                     """{"code":"key167", "msg": "G-Code macro rename of different types ('%s' vs '%s')", "values": ["%s", "%s"]}"""
                     % (self.alias, self.rename_existing, self.alias, self.rename_existing))
             printer.register_event_handler("klippy:connect",

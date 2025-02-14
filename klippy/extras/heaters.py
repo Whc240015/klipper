@@ -219,35 +219,18 @@ class ControlBangBang:
         self.heater_max_power = heater.get_max_power()
         self.max_delta = config.getfloat('max_delta', 2.0, above=0.)
         self.heating = False
-         # 新增风扇反馈相关属性
-        self.fan_feedback = None
-        if self.config.has_section('fan_feedback'):
-            self.fan_feedback = self.printer.lookup_object('fan_feedback')
-
     def temperature_update(self, read_time, temp, target_temp):
         if self.heating and temp >= target_temp+self.max_delta:
             self.heating = False
         elif not self.heating and temp <= target_temp-self.max_delta:
             self.heating = True
-             # 新增风扇状态检测逻辑
-        if self.heating and self._is_chamber_heater():
-            fan_speed = self._get_fan_speed()
-            if fan_speed <= 0 and target_temp > 0:
-                self._send_error_519()
-
         if self.heating:
             self.heater.set_pwm(read_time, self.heater_max_power)
         else:
             self.heater.set_pwm(read_time, 0.)
     def check_busy(self, eventtime, smoothed_temp, target_temp):
         return smoothed_temp < target_temp-self.max_delta
-    def _send_error_519(self):
-        """发送错误信息 key519"""
-        gcode = self.printer.lookup_object('gcode')
-        gcode._respond_error(
-            """{"code":"key519", "msg":"PTC fan_speed==0, run M141 S0 to close PTC heaters", "values":[]}"""
-        )
-
+    
 
 ######################################################################
 # Proportional Integral Derivative (PID) control algo

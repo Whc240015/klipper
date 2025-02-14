@@ -43,9 +43,7 @@ class pca9685_pwm:
         if cycle_time != self._cycle_time:
             logging.info("Ignoring pca9685 cycle time of %.6f (using %.6f)",
                          cycle_time, self._cycle_time)
-    def setup_start_value(self, start_value, shutdown_value,is_static=False):
-        if is_static and start_value != shutdown_value:
-            raise pins.error("""{"code":"key277": "msg":"Static pin can not have shutdown value", "values":[]}""")
+    def setup_start_value(self, start_value, shutdown_value):
         if self._invert:
             start_value = 1. - start_value
             shutdown_value = 1. - shutdown_value
